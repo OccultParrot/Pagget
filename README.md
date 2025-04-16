@@ -1,7 +1,8 @@
 # Pagget
 
 Discord bot for the Parasaurolophus herd Longcrest Fellowship on the Path of Titans server Dynasty Realism.
-discord: https://discord.gg/mgSZqp9PFD
+
+Discord: https://discord.gg/mgSZqp9PFD
 
 The bot handles affliction management for Parasaurolophus characters with the following commands:
     
