@@ -13,6 +13,7 @@ import os
 import sys
 import json
 import random
+import warnings
 from typing import List, Optional
 
 import discord
@@ -39,11 +40,25 @@ def get_affliction_description(affliction: str) -> str:
     return parts[1] if len(parts) > 1 else ""
 
 
-type Affliction = {
-    "name": str,
-    "description": str,
-    "chance": str
-}
+class Affliction:
+    """Class representing an affliction with name, description, and rarity."""
+
+    def __init__(self, name: str, description: str, rarity: str):
+        self.name = name
+        self.description = description
+        self.rarity = rarity
+
+    def __str__(self):
+        return f"{self.name.title()}"
+
+    @classmethod
+    def from_dict(cls, data: dict):
+        """Create an Affliction instance from a dictionary."""
+        return cls(
+            name=data.get("name", ""),
+            description=data.get("description", ""),
+            rarity=data.get("rarity", "")
+        )
 
 
 class AfflictionBot:
@@ -59,7 +74,7 @@ class AfflictionBot:
         self.logger = Logger(LOG_FILE)
 
         # Load afflictions
-        self.afflictions = self._load_afflictions()
+        self.afflictions = self._load_json_afflictions()
 
         # Configure Discord client
         intents = discord.Intents(messages=True, guilds=True)
@@ -71,41 +86,32 @@ class AfflictionBot:
         self._register_commands()
         self._register_events()
 
-    def _load_afflictions(self) -> List[str]:
-        """
-        Load afflictions from the affliction file.
-        
-        Returns:
-            List of affliction strings in the format "[name] - [description]"
-        
-        Exits if the affliction file is not found.
-        """
-        try:
-            with open(AFFLICTION_FILE, 'r') as f:
-                lines = f.readlines()
-                # Filter out empty lines and strip whitespace
-                return [line.strip() for line in lines if line.strip()]
-        except FileNotFoundError:
-            self.console.print(f"[red bold]Error: {AFFLICTION_FILE} not found", justify="center")
-            exit(1)
-        except Exception as e:
-            self.console.print(f"[red bold]Error loading afflictions: {e}", justify="center")
-            exit(1)
-
     def _load_json_afflictions(self) -> List[Affliction]:
         try:
-            with open(AFFLICTION_FILE, 'r') as f:
-                afflictions = json.load(f)
+            with open("afflictions.json", 'r') as f:
+                raw_data = json.load(f)
+
+                afflictions = []
+                for item in raw_data:
+                    if not all(key in item for key in ["name", "description", "rarity"]):
+                        self.console.print(f"[yellow]Warning: Skipping invalid affliction entry: {item}")
+                        self.logger.log(f"Skipping invalid affliction entry: {item}", "Json")
+                        continue
+
+                    affliction = Affliction.from_dict(item)
+                    afflictions.append(affliction)
+
+                self.console.print(afflictions)
                 return afflictions
-            
+
         except FileNotFoundError:
             self.console.print(f"[red bold]Error: {AFFLICTION_FILE} not found", justify="center")
             exit(1)
-            
+
         except json.JSONDecodeError:
             self.console.print(f"[red bold]Error: {AFFLICTION_FILE} is not a valid JSON file", justify="center")
             exit(1)
-            
+
         except Exception as e:
             self.console.print(f"[red bold]Error loading afflictions: {e}", justify="center")
             exit(1)
@@ -116,7 +122,7 @@ class AfflictionBot:
         @self.tree.command(name="roll_affliction", description="Rolls for afflictions affecting your Parasaurolophus")
         async def roll_affliction(interaction: discord.Interaction):
             try:
-                afflictions = self._roll_for_afflictions()
+                afflictions: List[Affliction] = self._roll_for_afflictions()
 
                 if not afflictions:
                     self.logger.log(f"{interaction.user.name} rolled no afflictions.", "Bot")
@@ -124,17 +130,14 @@ class AfflictionBot:
                     return
 
                 if len(afflictions) == 1:
-                    affliction_name = get_affliction_name(afflictions[0])
-                    affliction_desc = get_affliction_description(afflictions[0])
-                    self.logger.log(f"{interaction.user.name} rolled 1 affliction: {afflictions[0]}", "Bot")
-                    await interaction.response.send_message(f"You have **{affliction_name}** - {affliction_desc}")
+                    self.logger.log(f"{interaction.user.name} rolled 1 affliction: {afflictions[0].name}", "Bot")
+                    await interaction.response.send_message(
+                        f"You have **{afflictions[0].name}** - {afflictions[0].description}")
                     return
 
                 response = "You have the following afflictions:"
                 for affliction in afflictions:
-                    affliction_name = get_affliction_name(affliction)
-                    affliction_desc = get_affliction_description(affliction)
-                    response += f"\n- **{affliction_name}** - {affliction_desc}"
+                    response += f"\n- **{affliction.name.title()}** - {affliction.description}"
 
                 self.logger.log(f"{interaction.user.name} rolled {len(afflictions)} afflictions: \n{afflictions}",
                                 "Bot")
@@ -151,8 +154,8 @@ class AfflictionBot:
                 response = "**Available Afflictions:**"
 
                 for affliction in self.afflictions:
-                    affliction_name = get_affliction_name(affliction)
-                    response += f"\n- **{affliction_name}** | Run /info {affliction_name.lower().split(' ')[0]}"
+                    self.console.print(affliction.name)
+                    response += f"\n- **{affliction.name.title()}** | Run /info {affliction.name.lower().split(' ')[0]}"
 
                 await interaction.response.send_message(response)
                 self.logger.log(f"{interaction.user.name} listed all afflictions", "Bot")
@@ -168,12 +171,10 @@ class AfflictionBot:
                 found_affliction = self._find_affliction(affliction)
 
                 if found_affliction:
-                    affliction_name = get_affliction_name(found_affliction)
-                    affliction_desc = get_affliction_description(found_affliction)
 
-                    response = f"**{affliction_name}**\n{affliction_desc}"
+                    response = f"**{found_affliction.name.title()}**\n{found_affliction.description}"
                     await interaction.response.send_message(response)
-                    self.logger.log(f"{interaction.user.name} got info on {affliction_name}", "Bot")
+                    self.logger.log(f"{interaction.user.name} got info on {found_affliction.name.title()}", "Bot")
                 else:
                     await interaction.response.send_message(
                         f"Affliction '{affliction}' not found. Use /list_afflictions to see all available afflictions.",
@@ -208,7 +209,7 @@ class AfflictionBot:
             self.console.print("[green]Command tree synced", justify="center")
             self.logger.log("Command tree synced", "Bot")
 
-    def _roll_for_afflictions(self) -> List[str]:
+    def _roll_for_afflictions(self) -> List[Affliction]:
         """
         Roll for afflictions based on the configured chance.
         
@@ -233,7 +234,7 @@ class AfflictionBot:
 
         return result
 
-    def _find_affliction(self, search_term: str) -> Optional[str]:
+    def _find_affliction(self, search_term: str) -> Optional[Affliction]:
         """
         Find an affliction by a search term.
         
@@ -243,10 +244,10 @@ class AfflictionBot:
         Returns:
             The full affliction string if found, None otherwise
         """
-        search_term = search_term.lower().replace('_', ' ')
+        search_term = search_term.lower()
 
         for affliction in self.afflictions:
-            name = get_affliction_name(affliction).lower()
+            name = affliction.lower()
             if search_term in name or search_term == name.split()[0]:
                 return affliction
 
