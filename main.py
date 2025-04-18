@@ -91,17 +91,16 @@ class AfflictionBot:
             with open("afflictions.json", 'r') as f:
                 raw_data = json.load(f)
 
-                afflictions = []
+                afflictions: List[Affliction] = []
                 for item in raw_data:
                     if not all(key in item for key in ["name", "description", "rarity"]):
                         self.console.print(f"[yellow]Warning: Skipping invalid affliction entry: {item}")
                         self.logger.log(f"Skipping invalid affliction entry: {item}", "Json")
                         continue
 
-                    affliction = Affliction.from_dict(item)
+                    affliction: Affliction = Affliction.from_dict(item)
                     afflictions.append(affliction)
-
-                self.console.print(afflictions)
+                    
                 return afflictions
 
         except FileNotFoundError:
