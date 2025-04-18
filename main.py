@@ -10,6 +10,7 @@ The bot handles affliction management for Parasaurolophus characters with the fo
 All afflictions are stored in a text file called afflictions.txt in the format: [affliction name] - [description]
 """
 import os
+import sys
 import random
 from typing import List, Optional
 
@@ -22,7 +23,7 @@ from logger import Logger
 
 
 # Constants
-AFFLICTION_CHANCE = 100  # 1 in x chance of rolling a new affliction
+AFFLICTION_CHANCE = 25  # Percentage chance to roll for an affliction
 AFFLICTION_FILE = "afflictions.txt"
 LOG_FILE = "log.txt"
 
@@ -183,7 +184,7 @@ class AfflictionBot:
             if not available_afflictions:
                 break
 
-            if random.randint(1, AFFLICTION_CHANCE) == 1:
+            if random.random() < AFFLICTION_CHANCE / 100:
                 choice = random.choice(available_afflictions)
                 result.append(choice)
                 available_afflictions.remove(choice)
@@ -223,7 +224,10 @@ class AfflictionBot:
 
     def run(self):
         """Run the Discord bot."""
-        token = os.getenv("TOKEN")
+        if len(sys.argv) >= 2 and sys.argv[1] == "-P":
+            token = os.getenv("PRODUCTION_TOKEN")
+        else:
+            token = os.getenv("TEST_TOKEN")
         if not token:
             self.console.print("[red bold]Error: Discord TOKEN not found in environment variables", justify="center")
             exit(1)
