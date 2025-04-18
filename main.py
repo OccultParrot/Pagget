@@ -7,13 +7,15 @@ The bot handles affliction management for Parasaurolophus characters with the fo
     - /list_afflictions: Lists all the available afflictions
     - /info [affliction]: Describes the supplied affliction if it exists
     
-All afflictions are stored in a text file called afflictions.txt in the format: [affliction name] - [description]
+All afflictions are stored in a text file called afflictions.json. Its an array of objects with the following keys:
+    - name: The name of the affliction
+    - description: The description of the affliction
+    - rarity: The rarity of the affliction (common, uncommon, rare, very rare)
 """
 import os
 import sys
 import json
 import random
-import warnings
 from typing import List, Optional
 
 import discord
@@ -25,19 +27,8 @@ from logger import Logger
 
 # Constants
 AFFLICTION_CHANCE = 25  # Percentage chance to roll for an affliction
-AFFLICTION_FILE = "afflictions.txt"
+AFFLICTION_FILE = "afflictions.json"
 LOG_FILE = "log.txt"
-
-
-def get_affliction_name(affliction: str) -> str:
-    """Extract and format the name portion of an affliction."""
-    return affliction.split(' - ')[0].replace('_', ' ').title()
-
-
-def get_affliction_description(affliction: str) -> str:
-    """Extract the description portion of an affliction."""
-    parts = affliction.split(' - ', 1)
-    return parts[1] if len(parts) > 1 else ""
 
 
 class Affliction:
@@ -87,8 +78,14 @@ class AfflictionBot:
         self._register_events()
 
     def _load_json_afflictions(self) -> List[Affliction]:
+        """
+        Load afflictions from a JSON file.
+        
+        :return: 
+            A list of Affliction objects
+        """
         try:
-            with open("afflictions.json", 'r') as f:
+            with open(AFFLICTION_FILE, 'r') as f:
                 raw_data = json.load(f)
 
                 afflictions: List[Affliction] = []
@@ -100,7 +97,7 @@ class AfflictionBot:
 
                     affliction: Affliction = Affliction.from_dict(item)
                     afflictions.append(affliction)
-                    
+
                 return afflictions
 
         except FileNotFoundError:
@@ -118,27 +115,34 @@ class AfflictionBot:
     def _register_commands(self):
         """Register all Discord slash commands."""
 
-        @self.tree.command(name="roll_affliction", description="Rolls for afflictions affecting your Parasaurolophus")
-        async def roll_affliction(interaction: discord.Interaction):
+        @self.tree.command(name="roll-affliction", description="Rolls for afflictions affecting your Parasaurolophus")
+        @app_commands.describe(para="Your Parasaurolophus")
+        async def roll_affliction(interaction: discord.Interaction, para: str = None):
             try:
                 afflictions: List[Affliction] = self._roll_for_afflictions()
-
+                
+                if para is None:
+                    para = interaction.user.name
+                else:
+                    para = para.capitalize()
+                
+                
                 if not afflictions:
-                    self.logger.log(f"{interaction.user.name} rolled no afflictions.", "Bot")
-                    await interaction.response.send_message("You have **no** afflictions")
+                    self.logger.log(f"{para} rolled no afflictions.", "Bot")
+                    await interaction.response.send_message(f"{para} has **no** afflictions")
                     return
 
                 if len(afflictions) == 1:
-                    self.logger.log(f"{interaction.user.name} rolled 1 affliction: {afflictions[0].name}", "Bot")
+                    self.logger.log(f"{para} rolled 1 affliction: {afflictions[0].name}", "Bot")
                     await interaction.response.send_message(
-                        f"You have **{afflictions[0].name}** - {afflictions[0].description}")
+                        f"You have **{afflictions[0].name}** *({afflictions[0].rarity.title()})* - {afflictions[0].description}")
                     return
 
-                response = "You have the following afflictions:"
+                response = f"{para} has the following afflictions:"
                 for affliction in afflictions:
-                    response += f"\n- **{affliction.name.title()}** - {affliction.description}"
+                    response += f"\n- **{affliction.name.title()}** *({afflictions[0].rarity.title()})* - {affliction.description}"
 
-                self.logger.log(f"{interaction.user.name} rolled {len(afflictions)} afflictions: \n{afflictions}",
+                self.logger.log(f"{para} rolled {len(afflictions)} afflictions: \n{afflictions}",
                                 "Bot")
                 await interaction.response.send_message(response)
 
@@ -147,14 +151,14 @@ class AfflictionBot:
                 await interaction.response.send_message("An error occurred while rolling for afflictions",
                                                         ephemeral=True)
 
-        @self.tree.command(name="list_afflictions", description="Lists all available afflictions")
+        @self.tree.command(name="list-afflictions", description="Lists all available afflictions")
         async def list_afflictions(interaction: discord.Interaction):
             try:
                 response = "**Available Afflictions:**"
 
                 for affliction in self.afflictions:
                     self.console.print(affliction.name)
-                    response += f"\n- **{affliction.name.title()}** | Run /info {affliction.name.lower().split(' ')[0]}"
+                    response += f"\n- **{affliction.name.title()}** *({affliction.rarity})* | Run /info {affliction.name.lower().split(' ')[0]}"
 
                 await interaction.response.send_message(response)
                 self.logger.log(f"{interaction.user.name} listed all afflictions", "Bot")
