@@ -11,6 +11,7 @@ All afflictions are stored in a text file called afflictions.txt in the format: 
 """
 import os
 import sys
+import json
 import random
 from typing import List, Optional
 
@@ -20,7 +21,6 @@ import dotenv
 from rich.console import Console
 
 from logger import Logger
-
 
 # Constants
 AFFLICTION_CHANCE = 25  # Percentage chance to roll for an affliction
@@ -37,6 +37,13 @@ def get_affliction_description(affliction: str) -> str:
     """Extract the description portion of an affliction."""
     parts = affliction.split(' - ', 1)
     return parts[1] if len(parts) > 1 else ""
+
+
+type Affliction = {
+    "name": str,
+    "description": str,
+    "chance": str
+}
 
 
 class AfflictionBot:
@@ -85,6 +92,24 @@ class AfflictionBot:
             self.console.print(f"[red bold]Error loading afflictions: {e}", justify="center")
             exit(1)
 
+    def _load_json_afflictions(self) -> List[Affliction]:
+        try:
+            with open(AFFLICTION_FILE, 'r') as f:
+                afflictions = json.load(f)
+                return afflictions
+            
+        except FileNotFoundError:
+            self.console.print(f"[red bold]Error: {AFFLICTION_FILE} not found", justify="center")
+            exit(1)
+            
+        except json.JSONDecodeError:
+            self.console.print(f"[red bold]Error: {AFFLICTION_FILE} is not a valid JSON file", justify="center")
+            exit(1)
+            
+        except Exception as e:
+            self.console.print(f"[red bold]Error loading afflictions: {e}", justify="center")
+            exit(1)
+
     def _register_commands(self):
         """Register all Discord slash commands."""
 
@@ -111,12 +136,14 @@ class AfflictionBot:
                     affliction_desc = get_affliction_description(affliction)
                     response += f"\n- **{affliction_name}** - {affliction_desc}"
 
-                self.logger.log(f"{interaction.user.name} rolled {len(afflictions)} afflictions: \n{afflictions}", "Bot")
+                self.logger.log(f"{interaction.user.name} rolled {len(afflictions)} afflictions: \n{afflictions}",
+                                "Bot")
                 await interaction.response.send_message(response)
 
             except Exception as e:
                 self.logger.log(f"Error in roll_affliction: {e}", "Bot")
-                await interaction.response.send_message("An error occurred while rolling for afflictions", ephemeral=True)
+                await interaction.response.send_message("An error occurred while rolling for afflictions",
+                                                        ephemeral=True)
 
         @self.tree.command(name="list_afflictions", description="Lists all available afflictions")
         async def list_afflictions(interaction: discord.Interaction):
@@ -155,7 +182,8 @@ class AfflictionBot:
 
             except Exception as e:
                 self.logger.log(f"Error in info command: {e}", "Bot")
-                await interaction.response.send_message("An error occurred while retrieving affliction info", ephemeral=True)
+                await interaction.response.send_message("An error occurred while retrieving affliction info",
+                                                        ephemeral=True)
 
     def _register_events(self):
         """Register Discord client events."""
