@@ -28,6 +28,17 @@ AFFLICTION_FILE = "afflictions.txt"
 LOG_FILE = "log.txt"
 
 
+def get_affliction_name(affliction: str) -> str:
+    """Extract and format the name portion of an affliction."""
+    return affliction.split(' - ')[0].replace('_', ' ').title()
+
+
+def get_affliction_description(affliction: str) -> str:
+    """Extract the description portion of an affliction."""
+    parts = affliction.split(' - ', 1)
+    return parts[1] if len(parts) > 1 else ""
+
+
 class AfflictionBot:
     """Main bot class to handle Discord interactions and affliction management."""
 
@@ -88,16 +99,16 @@ class AfflictionBot:
                     return
 
                 if len(afflictions) == 1:
-                    affliction_name = self._get_affliction_name(afflictions[0])
-                    affliction_desc = self._get_affliction_description(afflictions[0])
+                    affliction_name = get_affliction_name(afflictions[0])
+                    affliction_desc = get_affliction_description(afflictions[0])
                     self.logger.log(f"{interaction.user.name} rolled 1 affliction: {afflictions[0]}", "Bot")
                     await interaction.response.send_message(f"You have **{affliction_name}** - {affliction_desc}")
                     return
 
                 response = "You have the following afflictions:"
                 for affliction in afflictions:
-                    affliction_name = self._get_affliction_name(affliction)
-                    affliction_desc = self._get_affliction_description(affliction)
+                    affliction_name = get_affliction_name(affliction)
+                    affliction_desc = get_affliction_description(affliction)
                     response += f"\n- **{affliction_name}** - {affliction_desc}"
 
                 self.logger.log(f"{interaction.user.name} rolled {len(afflictions)} afflictions: \n{afflictions}", "Bot")
@@ -113,7 +124,7 @@ class AfflictionBot:
                 response = "**Available Afflictions:**"
 
                 for affliction in self.afflictions:
-                    affliction_name = self._get_affliction_name(affliction)
+                    affliction_name = get_affliction_name(affliction)
                     response += f"\n- **{affliction_name}** | Run /info {affliction_name.lower().split(' ')[0]}"
 
                 await interaction.response.send_message(response)
@@ -130,8 +141,8 @@ class AfflictionBot:
                 found_affliction = self._find_affliction(affliction)
 
                 if found_affliction:
-                    affliction_name = self._get_affliction_name(found_affliction)
-                    affliction_desc = self._get_affliction_description(found_affliction)
+                    affliction_name = get_affliction_name(found_affliction)
+                    affliction_desc = get_affliction_description(found_affliction)
 
                     response = f"**{affliction_name}**\n{affliction_desc}"
                     await interaction.response.send_message(response)
@@ -207,20 +218,11 @@ class AfflictionBot:
         search_term = search_term.lower().replace('_', ' ')
 
         for affliction in self.afflictions:
-            name = self._get_affliction_name(affliction).lower()
+            name = get_affliction_name(affliction).lower()
             if search_term in name or search_term == name.split()[0]:
                 return affliction
 
         return None
-
-    def _get_affliction_name(self, affliction: str) -> str:
-        """Extract and format the name portion of an affliction."""
-        return affliction.split(' - ')[0].replace('_', ' ').title()
-
-    def _get_affliction_description(self, affliction: str) -> str:
-        """Extract the description portion of an affliction."""
-        parts = affliction.split(' - ', 1)
-        return parts[1] if len(parts) > 1 else ""
 
     def run(self):
         """Run the Discord bot."""
