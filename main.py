@@ -21,7 +21,6 @@ from typing import List, Optional
 import discord
 from discord import app_commands
 import dotenv
-from pygments.lexers.css import common_sass_tokens
 from rich.console import Console
 
 from logger import Logger
@@ -156,7 +155,7 @@ class AfflictionBot:
         async def list_afflictions(interaction: discord.Interaction):
             try:
                 response = "**Available Afflictions:**"
-                
+
                 common = sorted([a for a in self.afflictions if a.rarity.lower() == "common"],
                                 key=lambda a: a.name.lower())
                 uncommon = sorted([a for a in self.afflictions if a.rarity.lower() == "uncommon"],
