@@ -21,12 +21,13 @@ from typing import List, Optional
 import discord
 from discord import app_commands
 import dotenv
+from pygments.lexers.css import common_sass_tokens
 from rich.console import Console
 
 from logger import Logger
 
 # Constants
-AFFLICTION_CHANCE = 25  # Percentage chance to roll for an affliction
+AFFLICTION_CHANCE = 50  # Percentage chance to roll for an affliction
 AFFLICTION_FILE = "afflictions.json"
 LOG_FILE = "log.txt"
 
@@ -66,6 +67,7 @@ class AfflictionBot:
 
         # Load afflictions
         self.afflictions = self._load_json_afflictions()
+        self.rarity_list = [("rare", "sparkles"), ("ultra rare", "star2")]
 
         # Configure Discord client
         intents = discord.Intents(messages=True, guilds=True)
@@ -120,13 +122,12 @@ class AfflictionBot:
         async def roll_affliction(interaction: discord.Interaction, para: str = None):
             try:
                 afflictions: List[Affliction] = self._roll_for_afflictions()
-                
+
                 if para is None:
                     para = interaction.user.name
                 else:
                     para = para.capitalize()
-                
-                
+
                 if not afflictions:
                     self.logger.log(f"{para} rolled no afflictions.", "Bot")
                     await interaction.response.send_message(f"{para} has **no** afflictions")
@@ -135,12 +136,12 @@ class AfflictionBot:
                 if len(afflictions) == 1:
                     self.logger.log(f"{para} rolled 1 affliction: {afflictions[0].name}", "Bot")
                     await interaction.response.send_message(
-                        f"You have **{afflictions[0].name}** *({afflictions[0].rarity.title()})* - {afflictions[0].description}")
+                        f"{para} has **{afflictions[0].name}** *({afflictions[0].rarity.title()})* - {afflictions[0].description}")
                     return
 
                 response = f"{para} has the following afflictions:"
                 for affliction in afflictions:
-                    response += f"\n- **{affliction.name.title()}** *({afflictions[0].rarity.title()})* - {affliction.description}"
+                    response += f"\n- **{affliction.name.title()}** *({affliction.rarity.title()})* - {affliction.description}"
 
                 self.logger.log(f"{para} rolled {len(afflictions)} afflictions: \n{afflictions}",
                                 "Bot")
@@ -155,10 +156,20 @@ class AfflictionBot:
         async def list_afflictions(interaction: discord.Interaction):
             try:
                 response = "**Available Afflictions:**"
+                
+                common = sorted([a for a in self.afflictions if a.rarity.lower() == "common"],
+                                key=lambda a: a.name.lower())
+                uncommon = sorted([a for a in self.afflictions if a.rarity.lower() == "uncommon"],
+                                  key=lambda a: a.name.lower())
+                rare = sorted([a for a in self.afflictions if a.rarity.lower() == "rare"], key=lambda a: a.name.lower())
+                ultra_rare = sorted([a for a in self.afflictions if a.rarity.lower() == "ultra rare"],
+                                    key=lambda a: a.name.lower())
 
-                for affliction in self.afflictions:
+                sorted_afflictions = common + uncommon + rare + ultra_rare
+
+                for affliction in sorted_afflictions:
                     self.console.print(affliction.name)
-                    response += f"\n- **{affliction.name.title()}** *({affliction.rarity})* | Run /info {affliction.name.lower().split(' ')[0]}"
+                    response += f"\n- **{affliction.name.title()}** *({affliction.rarity.title()})* | Run /info {affliction.name.lower().split(' ')[0]}"
 
                 await interaction.response.send_message(response)
                 self.logger.log(f"{interaction.user.name} listed all afflictions", "Bot")
@@ -214,7 +225,7 @@ class AfflictionBot:
 
     def _roll_for_afflictions(self) -> List[Affliction]:
         """
-        Roll for afflictions based on the configured chance.
+        Roll for afflictions based on the configured chance and rarity.
         
         Returns:
             A list of afflictions the character has
@@ -227,12 +238,42 @@ class AfflictionBot:
             if not available_afflictions:
                 break
 
+            # Check if we get any affliction at all
             if random.random() < AFFLICTION_CHANCE / 100:
-                choice = random.choice(available_afflictions)
-                result.append(choice)
-                available_afflictions.remove(choice)
+                # Group remaining afflictions by rarity
+                commons = [a for a in available_afflictions if a.rarity.lower() == "common"]
+                uncommons = [a for a in available_afflictions if a.rarity.lower() == "uncommon"]
+                rares = [a for a in available_afflictions if a.rarity.lower() == "rare"]
+                ultra_rares = [a for a in available_afflictions if a.rarity.lower() == "ultra rare"]
+
+                rarity_groups = [commons, uncommons, rares, ultra_rares]
+                rarity_weights = [60, 25, 10, 5]
+
+                if sum(rarity_weights) != 100:
+                    self.console.print("[red]Error: Rarity weights must sum to 100", justify="center")
+                    exit(1)
+
+                # Filter out empty groups
+                non_empty_groups = []
+                non_empty_weights = []
+
+                for group, weight in zip(rarity_groups, rarity_weights):
+                    if group:
+                        non_empty_groups.append(group)
+                        non_empty_weights.append(weight)
+
+                # Select a group based on rarity weights, then select random affliction from that group
+                if non_empty_groups:
+                    selected_group = random.choices(non_empty_groups, weights=non_empty_weights, k=1)[0]
+                    selected_affliction = random.choice(selected_group)
+
+                    result.append(selected_affliction)
+                    available_afflictions.remove(selected_affliction)
+                else:
+                    # No afflictions left in any rarity group
+                    break
             else:
-                # Stop rolling once we fail a roll
+                # Failed the roll, stop adding afflictions
                 break
 
         return result
@@ -255,6 +296,14 @@ class AfflictionBot:
                 return affliction
 
         return None
+
+    def _get_rarity_emoji(self, rarity: str) -> str:
+        for r, emoji in self.rarity_list:
+            if rarity.lower() == r.lower():
+                return f":{emoji}:"
+
+        else:
+            return ""
 
     def run(self):
         """Run the Discord bot."""
