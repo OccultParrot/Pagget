@@ -292,7 +292,7 @@ class AfflictionBot:
             if any(a.name.lower() == name.lower() for a in self.afflictions_dict[interaction.guild_id]):
                 await interaction.response.send_message(f"Affliction '{name}' already exists.", ephemeral=True)
                 return
-            
+
             try:
                 new_affliction = Affliction(name=name, description=description, rarity=rarity.value)
                 self.afflictions_dict[interaction.guild_id].append(new_affliction)
@@ -313,28 +313,30 @@ class AfflictionBot:
             else:
                 self.logger.log(f"Error in add_affliction: {error}", "Bot")
                 await interaction.response.send_message("An error occurred while adding the affliction", ephemeral=True)
-                
+
         @self.tree.command(name="remove-affliction", description="Removes an affliction from the list")
         @app_commands.describe(name="Name of the affliction")
         @app_commands.checks.has_permissions(administrator=True)
         async def remove_affliction(interaction: discord.Interaction, name: str):
-            
+
             # Check if the affliction does not exist
             if not any(a.name.lower() == name.lower() for a in self.afflictions_dict[interaction.guild_id]):
                 await interaction.response.send_message(f"Affliction '{name}' does not exist.", ephemeral=True)
                 return
-            
+
             try:
-                affliction_to_remove = next(a for a in self.afflictions_dict[interaction.guild_id] if a.name.lower() == name.lower())
+                affliction_to_remove = next(
+                    a for a in self.afflictions_dict[interaction.guild_id] if a.name.lower() == name.lower())
                 self.afflictions_dict[interaction.guild_id].remove(affliction_to_remove)
                 self._save_json_affliction(interaction.guild_id)
 
                 await interaction.response.send_message(f"Affliction '{name}' removed successfully.", ephemeral=True)
                 self.logger.log(f"{interaction.user.name} removed affliction {name}", "Bot")
-                
+
             except Exception as e:
                 self.logger.log(f"Error in remove_affliction: {e}", "Bot")
-                await interaction.response.send_message("An error occurred while removing the affliction", ephemeral=True)
+                await interaction.response.send_message("An error occurred while removing the affliction",
+                                                        ephemeral=True)
 
         @remove_affliction.error
         async def remove_affliction_error(interaction: discord.Interaction, error: app_commands.AppCommandError):
@@ -379,13 +381,13 @@ class AfflictionBot:
                 await self.tree.sync()
                 self.console.print("[green]Command tree synced[/]")
                 self.logger.log("Command tree synced", "Bot")
-            
+
             # List all registered commands
             self.console.print("\nRegistered Commands:")
             self.console.print("Commands in purple are admin-only")
             self.logger.log("Registered Commands:", "Bot")
             for command in self.tree.get_commands():
-                
+
                 if has_admin_check(command):
                     self.console.print(f"  • [purple]{command.name}[/] - {command.description}")
                     self.logger.log(f"    * Command: {command.name}  ADMIN ONLY - {command.description}", "Bot")
