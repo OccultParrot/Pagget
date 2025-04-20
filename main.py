@@ -193,7 +193,7 @@ class AfflictionBot:
         # Commands for everyone
         @self.tree.command(name="roll-affliction", description="Rolls for afflictions affecting your Parasaurolophus")
         @app_commands.describe(para="Your Parasaurolophus")
-        async def roll_affliction(interaction: discord.Interaction, para: str = None):
+        async def roll_affliction(interaction: discord.Interaction, para: str):
             try:
                 afflictions: List[Affliction] = self._roll_for_afflictions(interaction.guild_id)
 
@@ -356,6 +356,11 @@ class AfflictionBot:
             self.console.rule(f"{self.client.user.name}")
 
             self.console.print(f"Bot activated as {self.client.user}")
+            if any(arg == "-P" for arg in sys.argv):
+                self.console.print("Running in [green]production[/] mode")
+            
+            else:
+                self.console.print("Running in [yellow]development[/] mode")
             self.logger.log(f"{self.client.user.name} has logged in as {self.client.user}", "Bot")
 
             self.console.print("\nConnected Guilds:")
