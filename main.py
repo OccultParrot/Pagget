@@ -17,7 +17,7 @@ from logger import Logger
 from permissions import has_admin_check
 
 # Constants
-AFFLICTION_CHANCE = 50  # Percentage chance to roll for an affliction
+AFFLICTION_CHANCE = 25  # Percentage chance to roll for an affliction
 DATA_DIRECTORY = "data"
 LOG_FILE = "log.txt"
 
