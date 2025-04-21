@@ -11,6 +11,7 @@ import discord
 from discord import app_commands
 from discord.app_commands import checks
 import dotenv
+from pygments.lexer import default
 from rich.console import Console
 
 from logger import Logger
@@ -42,17 +43,19 @@ class AfflictionFileError(AfflictionBotError):
 class GuildConfig:
     """Class representing a guild configuration with species and afflictions."""
 
-    def __init__(self, species: str):
+    def __init__(self, species: str, chance: int = AFFLICTION_CHANCE):
         self.species = species
+        self.chance = chance
 
     def __str__(self):
-        return f"{self.species.title()}"
+        return f"{self.species.title()} ({self.chance}%)"
 
     @classmethod
     def from_dict(cls, data: dict):
         """Create a GuildConfig instance from a dictionary."""
         return cls(
-            species=data.get("species", "")
+            species=data.get("species", ""),
+            chance=data.get("chance", AFFLICTION_CHANCE)
         )
 
 
@@ -60,7 +63,8 @@ class GuildConfigEncoder(json.JSONEncoder):
     def default(self, obj):
         if isinstance(obj, GuildConfig):
             return {
-                "species": obj.species
+                "species": obj.species,
+                "chance": obj.chance
             }
         return json.JSONEncoder.default(self, obj)
 
@@ -226,15 +230,15 @@ class AfflictionBot:
 
         # Return default species if guild-specific file doesn't exist
         if not os.path.isfile(config_path):
-            self.console.print(f"[yellow]Warning: {config_path} not found. Using default species.")
-            self.logger.log(f"{config_path} not found. Using default species.", "Json")
+            self.console.print(f"[yellow]Warning: {config_path} not found. Using default configs.")
+            self.logger.log(f"{config_path} not found. Using default configs.", "Json")
             return GuildConfig("Parasaurolophus")
 
         try:
             with open(config_path, 'r') as f:
                 raw_data = json.load(f)
                 guild_config = GuildConfig.from_dict(raw_data)
-                self.console.print(f"[green]Loaded species {guild_config.species} from {config_path}")
+                self.console.print(f"[green]Loaded configs from {config_path}")
                 return guild_config
 
         except FileNotFoundError:
@@ -462,8 +466,9 @@ class AfflictionBot:
                     await interaction.response.send_message("You must specify a species.", ephemeral=True)
                     return
 
-                guild_config = GuildConfig(species)
-                self._save_json(interaction.guild_id, "guild_configs", guild_config, cls=GuildConfigEncoder)
+                self.guild_configs[interaction.guild_id].species = species
+                self._save_json(interaction.guild_id, "guild_configs", self.guild_configs[interaction.guild_id],
+                                cls=GuildConfigEncoder)
 
                 await interaction.response.send_message(f"Species set to {species}.", ephemeral=True)
                 self.logger.log(f"{interaction.user.name} set species to {species} for guild {interaction.guild_id}",
@@ -473,6 +478,26 @@ class AfflictionBot:
                 self.logger.log(f"Error in set_dino: {e}", "Bot")
                 await interaction.response.send_message("An error occurred while setting the species",
                                                         ephemeral=True)
+
+        @self.tree.command(name="set-chance", description="Sets the chance of rolling afflictions")
+        @app_commands.describe(chance="Percent chance of rolling afflictions (0-100)")
+        @app_commands.checks.has_permissions(administrator=True)
+        async def set_chance(interaction: discord.Interaction, chance: int):
+            try:
+                if chance is None:
+                    await interaction.response.send_message("You must specify a percent chance.", ephemeral=True)
+                    return
+
+                self.guild_configs[interaction.guild_id].chance = chance
+                self._save_json(interaction.guild_id, "guild_configs", self.guild_configs[interaction.guild_id],
+                                cls=GuildConfigEncoder)
+
+                await interaction.response.send_message(f"Chance set to {chance}%.", ephemeral=True)
+                self.logger.log(f"{interaction.user.name} set chance to {chance}% for guild {interaction.guild_id}",
+                                "Bot")
+            except Exception as e:
+                self.logger.log(f"Error in set_chance: {e}", "Bot")
+                await interaction.response.send_message("An error occurred while setting the chance", ephemeral=True)
 
         # Error handlers for slash commands
         @roll_affliction.error
@@ -608,7 +633,7 @@ class AfflictionBot:
                 break
 
             # Check if we get any affliction at all
-            if random.random() < AFFLICTION_CHANCE / 100:
+            if random.random() < self.guild_configs[guild_id].chance / 100:
                 # Group remaining afflictions by rarity
                 commons = [a for a in available_afflictions if a.rarity.lower() == "common"]
                 uncommons = [a for a in available_afflictions if a.rarity.lower() == "uncommon"]
