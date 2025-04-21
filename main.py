@@ -370,6 +370,7 @@ class AfflictionBot:
                 app_commands.Choice(name="Ultra Rare", value="ultra rare")
             ]
         )
+        @app_commands.checks.has_permissions(administrator=True)
         async def add_affliction(interaction: discord.Interaction, name: str, description: str,
                                  rarity: app_commands.Choice[str], is_minor: bool = False):
             try:
