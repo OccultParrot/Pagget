@@ -29,4 +29,16 @@ You need to make a .env file in the root of the project and add the variable "TO
 
 First "cd" into the project directory and run `pip install -r requirements.txt`
 
-Then run `python main.py` and there you go!
+There are a few command line arguments you can use. 
+
+The default way to run it is `python main.py`. This runs it in testing mode using your testing token.
+
+To run on production, add the `-P` arg. Example: `python main.py -P`
+
+To sync the command tree, which you should always do when adding a command or after installing a new version, add the `--sync` arg. Example: `python main.py --sync`
+
+After an update, I run the following command
+
+```bash
+python main.py -P --sync
+```
