@@ -2,6 +2,7 @@ import os
 import sys
 import json
 import random
+import math
 from json import JSONEncoder
 from typing import List, Optional
 import atexit
@@ -16,7 +17,7 @@ from logger import Logger
 from permissions import has_admin_check
 
 # Constants
-AFFLICTION_CHANCE = 25  # Percentage chance to roll for an affliction
+AFFLICTION_CHANCE = 50  # Percentage chance to roll for an affliction
 DATA_DIRECTORY = "data"
 LOG_FILE = "log.txt"
 
@@ -96,6 +97,34 @@ class AfflictionEncoder(json.JSONEncoder):
         return json.JSONEncoder.default(self, obj)
 
 
+def get_paths(directory_name: str, guild_id: int) -> (str, str):
+    return os.path.join(DATA_DIRECTORY, directory_name), os.path.join(DATA_DIRECTORY, directory_name,
+                                                                      f"{guild_id}.json")
+
+
+def get_rarity_color(rarity: str) -> discord.Color:
+    """Get the color associated with a rarity."""
+    if rarity.lower() == "common":
+        return discord.Color.green()
+    elif rarity.lower() == "uncommon":
+        return discord.Color.blue()
+    elif rarity.lower() == "rare":
+        return discord.Color.purple()
+    elif rarity.lower() == "ultra rare":
+        return discord.Color.yellow()
+    else:
+        return discord.Color.default()
+
+
+def get_affliction_embed(affliction: Affliction) -> discord.Embed:
+    """Create a Discord embed for an affliction."""
+    return discord.Embed(
+        title=affliction.name.title(),
+        description=f"-# {affliction.rarity.title()}\n\n{affliction.description}",
+        color=get_rarity_color(affliction.rarity)
+    )
+
+
 class AfflictionBot:
     """Main bot class to handle Discord interactions and affliction management."""
 
@@ -131,7 +160,7 @@ class AfflictionBot:
             A list of Affliction objects
         """
 
-        affliction_directory, affliction_path = self._get_paths("afflictions", guild_id)
+        affliction_directory, affliction_path = get_paths("afflictions", guild_id)
 
         if not self._validate_directory(affliction_directory):
             return []  # Return empty list if directory creation fails
@@ -214,7 +243,7 @@ class AfflictionBot:
             return GuildConfig("Parasaurolophus")  # Return default species if file not found
 
     def _save_json(self, guild_id: int, directory_name: str, data: any, cls: JSONEncoder | None = None) -> None:
-        directory, path = self._get_paths(directory_name, guild_id)
+        directory, path = get_paths(directory_name, guild_id)
 
         if not self._validate_directory(directory):
             return
@@ -244,23 +273,18 @@ class AfflictionBot:
                     dino = dino.capitalize()
 
                 if not afflictions:
-                    self.logger.log(f"{dino} rolled no afflictions.", "Bot")
                     await interaction.response.send_message(f"{dino} has **no** afflictions")
                     return
 
                 if len(afflictions) == 1:
-                    self.logger.log(f"{dino} rolled 1 affliction: {afflictions[0].name}", "Bot")
                     await interaction.response.send_message(
-                        f"{dino} has **{afflictions[0].name}** *({afflictions[0].rarity.title()})* - {afflictions[0].description}")
+                        f"{dino} has **{afflictions[0].name}**.",
+                        embed=get_affliction_embed(afflictions[0]))
                     return
 
-                response = f"{dino} has the following afflictions:"
-                for affliction in afflictions:
-                    response += f"\n- **{affliction.name.title()}** *({affliction.rarity.title()})* - {affliction.description}"
-
-                self.logger.log(
-                    f"{dino} rolled {len(afflictions)} afflictions: {', '.join([a.name for a in afflictions])}", "Bot")
-                await interaction.response.send_message(response)
+                await interaction.response.send_message(f"{dino} has the following afflictions:",
+                                                        embeds=[get_affliction_embed(affliction) for affliction in
+                                                                afflictions])
 
             except Exception as e:
                 self.logger.log(f"Error in roll_affliction: {e}", "Bot")
@@ -268,66 +292,69 @@ class AfflictionBot:
                                                         ephemeral=True)
 
         @self.tree.command(name="list-afflictions", description="Lists all available afflictions")
-        async def list_afflictions(interaction: discord.Interaction):
+        @app_commands.describe(page="What page to display")
+        async def list_afflictions(interaction: discord.Interaction, page: int = 1):
             try:
-                response = "**Available Afflictions:**"
-
                 common = sorted(
                     [a for a in self.afflictions_dict[interaction.guild_id] if a.rarity.lower() == "common"],
                     key=lambda a: a.name.lower())
+
                 uncommon = sorted(
                     [a for a in self.afflictions_dict[interaction.guild_id] if a.rarity.lower() == "uncommon"],
                     key=lambda a: a.name.lower())
+
                 rare = sorted([a for a in self.afflictions_dict[interaction.guild_id] if a.rarity.lower() == "rare"],
                               key=lambda a: a.name.lower())
+
                 ultra_rare = sorted(
                     [a for a in self.afflictions_dict[interaction.guild_id] if a.rarity.lower() == "ultra rare"],
                     key=lambda a: a.name.lower())
 
                 sorted_afflictions = common + uncommon + rare + ultra_rare
 
-                for affliction in sorted_afflictions:
-                    response += f"\n- **{affliction.name.title()}** *({affliction.rarity.title()})* | Run /info {affliction.name.lower().split(' ')[0]}"
+                length = len(sorted_afflictions)
 
-                await interaction.response.send_message(response)
+                pages = math.ceil(length / 10)
+
+                if page < 1 or page > pages:
+                    await interaction.response.send_message(
+                        f"Page {page} does not exist. There are only {pages} pages.")
+                    return
+
+                start = (page - 1) * 10
+                end = start + 10
+                sorted_afflictions = sorted_afflictions[start:end]
+
+                # Create embeds for each affliction
+                embeds = [get_affliction_embed(affliction) for affliction in sorted_afflictions]
+
+                # Add page number to the last embed's footer
+                if embeds:
+                    embeds[-1].set_footer(text=f"Page {page}/{pages}")
+
+                await interaction.response.send_message(f"**Available Afflictions:** (Page {page}/{pages})",
+                                                        embeds=embeds)
                 self.logger.log(f"{interaction.user.name} listed all afflictions", "Bot")
 
             except Exception as e:
                 self.logger.log(f"Error in list_afflictions: {e}", "Bot")
                 await interaction.response.send_message("An error occurred while listing afflictions", ephemeral=True)
 
-        @self.tree.command(name="info", description="Describes an affliction")
-        @app_commands.describe(affliction="Name of the affliction")
-        async def info(interaction: discord.Interaction, affliction: str):
-            try:
-                found_affliction = self._find_affliction(affliction, interaction.guild_id)
-
-                if found_affliction:
-                    response = f"**{found_affliction.name.title()}**\n{found_affliction.description}"
-                    await interaction.response.send_message(response)
-                    self.logger.log(f"{interaction.user.name} got info on {found_affliction.name.title()}", "Bot")
-                else:
-                    await interaction.response.send_message(
-                        f"Affliction '{affliction}' not found. Use /list_afflictions to see all available afflictions.",
-                        ephemeral=True
-                    )
-
-            except Exception as e:
-                self.logger.log(f"Error in info command: {e}", "Bot")
-                await interaction.response.send_message("An error occurred while retrieving affliction info",
-                                                        ephemeral=True)
-
         # Commands for admins
-        @self.tree.command(name="add-affliction", description="Adds an affliction to the list")
-        @app_commands.describe(name="Name of the affliction", description="Description of the affliction",
-                               rarity="Rarity of the affliction")
+        @self.tree.command(
+            name="add-affliction",
+            description="Adds an affliction to the list")
+        @app_commands.describe(
+            name="Name of the affliction",
+            description="Description of the affliction",
+            rarity="Rarity of the affliction"
+        )
         @app_commands.choices(rarity=[
             app_commands.Choice(name="Common", value="common"),
             app_commands.Choice(name="Uncommon", value="uncommon"),
             app_commands.Choice(name="Rare", value="rare"),
             app_commands.Choice(name="Ultra Rare", value="ultra rare")
         ])
-        @app_commands.checks.has_permissions(administrator=True)
         async def add_affliction(interaction: discord.Interaction, name: str, description: str,
                                  rarity: app_commands.Choice[str]):
             try:
@@ -341,7 +368,8 @@ class AfflictionBot:
                 self._save_json(interaction.guild_id, "afflictions", self.afflictions_dict[interaction.guild_id],
                                 cls=AfflictionEncoder)
 
-                await interaction.response.send_message(f"Affliction '{name}' added successfully.", ephemeral=True)
+                await interaction.response.send_message(f"Affliction '{name}' added successfully.",
+                                                        embed=get_affliction_embed(new_affliction), ephemeral=True)
                 self.logger.log(f"{interaction.user.name} added affliction {name}", "Bot")
 
             except Exception as e:
@@ -363,7 +391,11 @@ class AfflictionBot:
                 self._save_json(interaction.guild_id, "afflictions", self.afflictions_dict[interaction.guild_id],
                                 cls=AfflictionEncoder)
 
-                await interaction.response.send_message(f"Affliction '{name}' removed successfully.", ephemeral=True)
+                embed = get_affliction_embed(affliction_to_remove)
+                embed.set_footer(text="Affliction removed")
+
+                await interaction.response.send_message(f"Affliction '{name}' removed successfully.", embed=embed,
+                                                        ephemeral=True)
                 self.logger.log(f"{interaction.user.name} removed affliction {name}", "Bot")
 
             except Exception as e:
@@ -412,6 +444,7 @@ class AfflictionBot:
                                 cls=AfflictionEncoder)
 
                 await interaction.response.send_message(f"Affliction '{affliction}' edited successfully.",
+                                                        embed=get_affliction_embed(affliction_to_edit),
                                                         ephemeral=True)
                 self.logger.log(f"{interaction.user.name} edited affliction {affliction}", "Bot")
 
@@ -460,16 +493,6 @@ class AfflictionBot:
             else:
                 self.logger.log(f"Error in list_afflictions: {error}", "Bot")
                 await interaction.response.send_message("An error occurred while listing afflictions", ephemeral=True)
-
-        @info.error
-        async def info_error(interaction: discord.Interaction, error: app_commands.AppCommandError):
-            if isinstance(error, app_commands.MissingPermissions):
-                await interaction.response.send_message("You don't have permission to use this command.",
-                                                        ephemeral=True)
-            else:
-                self.logger.log(f"Error in info: {error}", "Bot")
-                await interaction.response.send_message("An error occurred while retrieving affliction info",
-                                                        ephemeral=True)
 
         @add_affliction.error
         async def add_affliction_error(interaction: discord.Interaction, error: app_commands.AppCommandError):
@@ -650,10 +673,6 @@ class AfflictionBot:
 
         else:
             return ""
-
-    def _get_paths(self, directory_name: str, guild_id: int) -> (str, str):
-        return os.path.join(DATA_DIRECTORY, directory_name), os.path.join(DATA_DIRECTORY, directory_name,
-                                                                          f"{guild_id}.json")
 
     def _get_affliction_from_name(self, affliction_name: str, guild_id: int) -> (Affliction, int):
         """
