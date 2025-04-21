@@ -43,9 +43,10 @@ class AfflictionFileError(AfflictionBotError):
 class GuildConfig:
     """Class representing a guild configuration with species and afflictions."""
 
-    def __init__(self, species: str, chance: int = AFFLICTION_CHANCE):
+    def __init__(self, species: str, chance: int = AFFLICTION_CHANCE, minor_chance: int = AFFLICTION_CHANCE + 10):
         self.species = species
         self.chance = chance
+        self.minor_chance = minor_chance
 
     def __str__(self):
         return f"{self.species.title()} ({self.chance}%)"
@@ -55,7 +56,8 @@ class GuildConfig:
         """Create a GuildConfig instance from a dictionary."""
         return cls(
             species=data.get("species", ""),
-            chance=data.get("chance", AFFLICTION_CHANCE)
+            chance=data.get("chance", AFFLICTION_CHANCE),
+            minor_chance=data.get("minor_chance", AFFLICTION_CHANCE + 10)
         )
 
 
@@ -64,7 +66,8 @@ class GuildConfigEncoder(json.JSONEncoder):
         if isinstance(obj, GuildConfig):
             return {
                 "species": obj.species,
-                "chance": obj.chance
+                "chance": obj.chance,
+                "minor_chance": obj.minor_chance
             }
         return json.JSONEncoder.default(self, obj)
 
@@ -72,10 +75,11 @@ class GuildConfigEncoder(json.JSONEncoder):
 class Affliction:
     """Class representing an affliction with name, description, and rarity."""
 
-    def __init__(self, name: str, description: str, rarity: str):
+    def __init__(self, name: str, description: str, rarity: str, is_minor: bool = False):
         self.name = name
         self.description = description
         self.rarity = rarity
+        self.is_minor = is_minor
 
     def __str__(self):
         return f"{self.name.title()}"
@@ -86,7 +90,8 @@ class Affliction:
         return cls(
             name=data.get("name", ""),
             description=data.get("description", ""),
-            rarity=data.get("rarity", "")
+            rarity=data.get("rarity", ""),
+            is_minor=data.get("is_minor", False)
         )
 
 
@@ -96,7 +101,8 @@ class AfflictionEncoder(json.JSONEncoder):
             return {
                 "name": obj.name,
                 "description": obj.description,
-                "rarity": obj.rarity
+                "rarity": obj.rarity,
+                "is_minor": obj.is_minor
             }
         return json.JSONEncoder.default(self, obj)
 
@@ -124,7 +130,7 @@ def get_affliction_embed(affliction: Affliction) -> discord.Embed:
     """Create a Discord embed for an affliction."""
     return discord.Embed(
         title=affliction.name.title(),
-        description=f"-# {affliction.rarity.title()}\n\n{affliction.description}",
+        description=f"-# {affliction.rarity.title()}\n{"-# *Minor Affliction*" if affliction.is_minor else ""}\n\n{affliction.description}",
         color=get_rarity_color(affliction.rarity)
     )
 
@@ -267,9 +273,11 @@ class AfflictionBot:
         # Commands for everyone
         @self.tree.command(name="roll-affliction", description="Rolls for afflictions affecting your dinosaur")
         @app_commands.describe(dino=f"Your dinosaur's name")
-        async def roll_affliction(interaction: discord.Interaction, dino: str):
+        @app_commands.describe(is_minor="Whether to roll for minor afflictions")
+        # @app_commands.checks.cooldown(1, 60, key=lambda i: i.user.id) # Uncomment to enable cooldown
+        async def roll_affliction(interaction: discord.Interaction, dino: str, is_minor: bool = False):
             try:
-                afflictions: List[Affliction] = self._roll_for_afflictions(interaction.guild_id)
+                afflictions: List[Affliction] = self._roll_for_afflictions(interaction.guild_id, is_minor=is_minor)
 
                 if dino is None:
                     dino = interaction.user.name
@@ -351,23 +359,26 @@ class AfflictionBot:
         @app_commands.describe(
             name="Name of the affliction",
             description="Description of the affliction",
-            rarity="Rarity of the affliction"
+            rarity="Rarity of the affliction",
+            is_minor="Whether the affliction is minor or not. ONLY AFFECTS COMMON RARITY"
         )
-        @app_commands.choices(rarity=[
-            app_commands.Choice(name="Common", value="common"),
-            app_commands.Choice(name="Uncommon", value="uncommon"),
-            app_commands.Choice(name="Rare", value="rare"),
-            app_commands.Choice(name="Ultra Rare", value="ultra rare")
-        ])
+        @app_commands.choices(
+            rarity=[
+                app_commands.Choice(name="Common", value="common"),
+                app_commands.Choice(name="Uncommon", value="uncommon"),
+                app_commands.Choice(name="Rare", value="rare"),
+                app_commands.Choice(name="Ultra Rare", value="ultra rare")
+            ]
+        )
         async def add_affliction(interaction: discord.Interaction, name: str, description: str,
-                                 rarity: app_commands.Choice[str]):
+                                 rarity: app_commands.Choice[str], is_minor: bool = False):
             try:
                 # Check if the affliction already exists
                 if self._if_affliction_exists(name, interaction.guild_id):
                     await interaction.response.send_message(f"Affliction '{name}' already exists.", ephemeral=True)
                     return
 
-                new_affliction = Affliction(name=name, description=description, rarity=rarity.value)
+                new_affliction = Affliction(name=name, description=description, rarity=rarity.value, is_minor=is_minor)
                 self.afflictions_dict[interaction.guild_id].append(new_affliction)
                 self._save_json(interaction.guild_id, "afflictions", self.afflictions_dict[interaction.guild_id],
                                 cls=AfflictionEncoder)
@@ -411,16 +422,20 @@ class AfflictionBot:
         @app_commands.describe(affliction="Current name of the affliction",
                                name="New name for the affliction",
                                description="New description of the affliction",
-                               rarity="New rarity of the affliction")
-        @app_commands.choices(rarity=[
-            app_commands.Choice(name="Common", value="common"),
-            app_commands.Choice(name="Uncommon", value="uncommon"),
-            app_commands.Choice(name="Rare", value="rare"),
-            app_commands.Choice(name="Ultra Rare", value="ultra rare")
-        ])
+                               rarity="New rarity of the affliction",
+                               is_minor="Whether the affliction is minor or not. ONLY AFFECTS COMMON RARITY")
+        @app_commands.choices(
+            rarity=[
+                app_commands.Choice(name="Common", value="common"),
+                app_commands.Choice(name="Uncommon", value="uncommon"),
+                app_commands.Choice(name="Rare", value="rare"),
+                app_commands.Choice(name="Ultra Rare", value="ultra rare")
+            ]
+        )
         @app_commands.checks.has_permissions(administrator=True)
         async def edit_affliction(interaction: discord.Interaction, affliction: str, name: str = None,
-                                  description: str = None, rarity: app_commands.Choice[str] = None):
+                                  description: str = None, rarity: app_commands.Choice[str] = None,
+                                  is_minor: bool = False):
             try:
                 # Check if the affliction exists
                 if not self._if_affliction_exists(affliction, interaction.guild_id):
@@ -442,6 +457,8 @@ class AfflictionBot:
                     affliction_to_edit.description = description
                 if rarity:
                     affliction_to_edit.rarity = rarity.value
+                if is_minor:
+                    affliction_to_edit.is_minor = is_minor
 
                 self.afflictions_dict[interaction.guild_id][index] = affliction_to_edit
                 self._save_json(interaction.guild_id, "afflictions", self.afflictions_dict[interaction.guild_id],
@@ -457,47 +474,41 @@ class AfflictionBot:
                 await interaction.response.send_message("An error occurred while editing the affliction",
                                                         ephemeral=True)
 
-        @self.tree.command(name="set-dino", description="Sets what species of dinosaur the afflictions are for")
-        @app_commands.describe(species="Species of the dinosaur")
+        @self.tree.command(name="set-configs",
+                           description="Sets the guild configuration. Dont enter any changes to view the current configuration")
+        @app_commands.describe(species="Species of the dinosaur",
+                               chance="Percent chance of rolling afflictions (0-100)",
+                               minor_chance="Percent chance of rolling minor afflictions (0-100)")
         @app_commands.checks.has_permissions(administrator=True)
-        async def set_dino(interaction: discord.Interaction, species: str):
+        async def set_configs(interaction: discord.Interaction, species: str = None, chance: int = None,
+                              minor_chance: bool = None):
             try:
-                if species is None:
-                    await interaction.response.send_message("You must specify a species.", ephemeral=True)
-                    return
+                if species is not None:
+                    self.guild_configs[interaction.guild_id].species = species
+                if chance is not None:
+                    self.guild_configs[interaction.guild_id].chance = chance
+                if minor_chance is not None:
+                    self.guild_configs[interaction.guild_id].minor_chance = minor_chance
 
-                self.guild_configs[interaction.guild_id].species = species
+                embed = discord.Embed(title=f"{interaction.guild.name}'s Configuration",
+                                      description="Guild configuration has been updated.")
+                embed.add_field(name="Species", value=self.guild_configs[interaction.guild_id].species, inline=False)
+                embed.add_field(name="Affliction Chance", value=f"{self.guild_configs[interaction.guild_id].chance}%",
+                                inline=False)
+                embed.add_field(name="Minor Affliction Chance",
+                                value=f"{self.guild_configs[interaction.guild_id].minor_chance}%", inline=False)
+
                 self._save_json(interaction.guild_id, "guild_configs", self.guild_configs[interaction.guild_id],
                                 cls=GuildConfigEncoder)
 
-                await interaction.response.send_message(f"Species set to {species}.", ephemeral=True)
-                self.logger.log(f"{interaction.user.name} set species to {species} for guild {interaction.guild_id}",
+                await interaction.response.send_message(f"Guild configuration updated.", embed=embed, ephemeral=True)
+                self.logger.log(f"{interaction.user.name} updated guild configuration for guild {interaction.guild_id}",
                                 "Bot")
 
             except Exception as e:
-                self.logger.log(f"Error in set_dino: {e}", "Bot")
-                await interaction.response.send_message("An error occurred while setting the species",
+                self.logger.log(f"Error in set_configs: {e}", "Bot")
+                await interaction.response.send_message("An error occurred while setting the guild configuration",
                                                         ephemeral=True)
-
-        @self.tree.command(name="set-chance", description="Sets the chance of rolling afflictions")
-        @app_commands.describe(chance="Percent chance of rolling afflictions (0-100)")
-        @app_commands.checks.has_permissions(administrator=True)
-        async def set_chance(interaction: discord.Interaction, chance: int):
-            try:
-                if chance is None:
-                    await interaction.response.send_message("You must specify a percent chance.", ephemeral=True)
-                    return
-
-                self.guild_configs[interaction.guild_id].chance = chance
-                self._save_json(interaction.guild_id, "guild_configs", self.guild_configs[interaction.guild_id],
-                                cls=GuildConfigEncoder)
-
-                await interaction.response.send_message(f"Chance set to {chance}%.", ephemeral=True)
-                self.logger.log(f"{interaction.user.name} set chance to {chance}% for guild {interaction.guild_id}",
-                                "Bot")
-            except Exception as e:
-                self.logger.log(f"Error in set_chance: {e}", "Bot")
-                await interaction.response.send_message("An error occurred while setting the chance", ephemeral=True)
 
         # Error handlers for slash commands
         @roll_affliction.error
@@ -538,24 +549,15 @@ class AfflictionBot:
                 await interaction.response.send_message("An error occurred while removing the affliction",
                                                         ephemeral=True)
 
-        @edit_affliction.error
-        async def edit_affliction_error(interaction: discord.Interaction, error: app_commands.AppCommandError):
+        @set_configs.error
+        async def set_configs_error(interaction: discord.Interaction, error: app_commands.AppCommandError):
             if isinstance(error, app_commands.MissingPermissions):
                 await interaction.response.send_message("You don't have permission to use this command.",
                                                         ephemeral=True)
             else:
-                self.logger.log(f"Error in edit_affliction: {error}", "Bot")
-                await interaction.response.send_message("An error occurred while editing the affliction",
+                self.logger.log(f"Error in set_configs: {error}", "Bot")
+                await interaction.response.send_message("An error occurred while setting the guild configuration",
                                                         ephemeral=True)
-
-        @set_dino.error
-        async def set_dino_error(interaction: discord.Interaction, error: app_commands.AppCommandError):
-            if isinstance(error, app_commands.MissingPermissions):
-                await interaction.response.send_message("You don't have permission to use this command.",
-                                                        ephemeral=True)
-            else:
-                self.logger.log(f"Error in set_dino: {error}", "Bot")
-                await interaction.response.send_message("An error occurred while setting the species", ephemeral=True)
 
     def _register_events(self):
         """Register Discord client events."""
@@ -617,7 +619,7 @@ class AfflictionBot:
                     self.console.print(f"  • [green]{command.name}[/] - {command.description}")
                     self.logger.log(f"    * Command: {command.name} - {command.description}", "Bot")
 
-    def _roll_for_afflictions(self, guild_id: int) -> List[Affliction]:
+    def _roll_for_afflictions(self, guild_id: int, is_minor: bool = False) -> List[Affliction]:
         """
         Roll for afflictions based on the configured chance and rarity.
         
@@ -633,19 +635,28 @@ class AfflictionBot:
                 break
 
             # Check if we get any affliction at all
-            if random.random() < self.guild_configs[guild_id].chance / 100:
+            if random.random() < (
+                    self.guild_configs[guild_id].minor_chance if is_minor else self.guild_configs[
+                        guild_id].chance) / 100:
                 # Group remaining afflictions by rarity
                 commons = [a for a in available_afflictions if a.rarity.lower() == "common"]
                 uncommons = [a for a in available_afflictions if a.rarity.lower() == "uncommon"]
                 rares = [a for a in available_afflictions if a.rarity.lower() == "rare"]
                 ultra_rares = [a for a in available_afflictions if a.rarity.lower() == "ultra rare"]
 
-                rarity_groups = [commons, uncommons, rares, ultra_rares]
-                rarity_weights = [60, 25, 10, 5]
+                if is_minor:
+                    commons = [a for a in commons if a.is_minor]
+                    rarity_groups = [commons]
+                    rarity_weights = [100]
+                else:
+                    # Rarity groups and their weights
+                    rarity_groups = [commons, uncommons, rares, ultra_rares]
+                    rarity_weights = [60, 25, 10, 5]
 
                 if sum(rarity_weights) != 100:
                     self.console.print("[red]Error: Rarity weights must sum to 100")
-                    exit(1)
+                    self.logger.log("[red]Error: Rarity weights must sum to 100")
+                    return []
 
                 # Filter out empty groups
                 non_empty_groups = []

@@ -32,7 +32,8 @@
   {
     "name": "Mites",
     "description": "Mites are external parasites that infest a Parasaurolophus' skin or scales. This makes one's skin itchy, can give loss of appetite and increased aggression",
-    "rarity": "common"
+    "rarity": "common",
+    "is_minor": true
   },
   {
     "name": "Hyperthyroidism",
