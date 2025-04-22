@@ -271,37 +271,69 @@ class AfflictionBot:
         """Register all Discord slash commands."""
 
         # Commands for everyone
-        @self.tree.command(name="roll-affliction", description="Rolls for afflictions affecting your dinosaur")
-        @app_commands.describe(dino=f"Your dinosaur's name")
-        @app_commands.describe(is_minor="Whether to roll for minor afflictions")
+        @self.tree.command(name="roll-affliction", description="Rolls for standard afflictions affecting your dinosaur")
+        @app_commands.describe(dino="Your dinosaur's name")
         # @app_commands.checks.cooldown(1, 60, key=lambda i: i.user.id) # Uncomment to enable cooldown
-        async def roll_affliction(interaction: discord.Interaction, dino: str, is_minor: bool = False):
+        async def roll_affliction(interaction: discord.Interaction, dino: str = None):
             try:
-                afflictions: List[Affliction] = self._roll_for_afflictions(interaction.guild_id, is_minor=is_minor)
-
+                afflictions: List[Affliction] = self._roll_for_afflictions(interaction.guild_id, is_minor=False)
+        
                 if dino is None:
                     dino = interaction.user.name
                 else:
                     dino = dino.capitalize()
-
+        
                 if not afflictions:
                     await interaction.response.send_message(f"{dino} has **no** afflictions")
                     return
-
+        
                 if len(afflictions) == 1:
                     await interaction.response.send_message(
                         f"{dino} has **{afflictions[0].name}**.",
                         embed=get_affliction_embed(afflictions[0]))
                     return
-
+        
                 await interaction.response.send_message(f"{dino} has the following afflictions:",
                                                         embeds=[get_affliction_embed(affliction) for affliction in
                                                                 afflictions])
-
+        
             except Exception as e:
                 self.logger.log(f"Error in roll_affliction: {e}", "Bot")
                 await interaction.response.send_message("An error occurred while rolling for afflictions",
                                                         ephemeral=True)
+        
+        @self.tree.command(name="roll-minor-affliction", description="Rolls for minor afflictions affecting your dinosaur")
+        @app_commands.describe(dino="Your dinosaur's name")
+        # @app_commands.checks.cooldown(1, 60, key=lambda i: i.user.id) # Uncomment to enable cooldown
+        async def roll_minor_affliction(interaction: discord.Interaction, dino: str = None):
+            try:
+                afflictions: List[Affliction] = self._roll_for_afflictions(interaction.guild_id, is_minor=True)
+        
+                if dino is None:
+                    dino = interaction.user.name
+                else:
+                    dino = dino.capitalize()
+        
+                if not afflictions:
+                    await interaction.response.send_message(f"{dino} has **no** minor afflictions")
+                    return
+        
+                if len(afflictions) == 1:
+                    await interaction.response.send_message(
+                        f"{dino} has **{afflictions[0].name}**.",
+                        embed=get_affliction_embed(afflictions[0]))
+                    return
+        
+                await interaction.response.send_message(f"{dino} has the following minor afflictions:",
+                                                        embeds=[get_affliction_embed(affliction) for affliction in
+                                                                afflictions])
+        
+            except Exception as e:
+                self.logger.log(f"Error in roll_minor_affliction: {e}", "Bot")
+                await interaction.response.send_message("An error occurred while rolling for minor afflictions",
+                                                        ephemeral=True)
+                
+        
 
         @self.tree.command(name="list-afflictions", description="Lists all available afflictions")
         @app_commands.describe(page="What page to display")
