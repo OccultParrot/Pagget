@@ -16,6 +16,7 @@ A discord bot I wrote for the herd Longcrest Fellowship on the Path of Titans se
         - [`/set-configs`](#set-configs)
 - [Configuration](#configuration)
 - [How is Data Stored?](#how-is-data-stored)
+- [Bot Building Tips and Tricks](#bot-building-tips-and-tricks)
 
 ## Installation
 
@@ -156,3 +157,101 @@ There is two folders, `guild_configs` and `afflictions`.
             - `ultra rare`
         - `is_minor` - Whether the affliction is a minor affliction. (Default: false)
 
+## Bot Building Tips and Tricks
+
+Some useful tips and tricks for building discord bots.
+
+### Json Saving
+
+While not really a tip or trick, I thought it would be useful to have a small section on how to save data to json files.
+
+Python has a built-in module called `json` that can be used to save data to json files. 
+is good for saving types that python has built in, but is a *bit* more completed for saving classes.
+
+If you have a class, you will need to make a function that converts the class to a dictionary.
+
+I did this via making another class named `[ClassName]Encoder` that inherits from `json.JSONEncoder` and overrides the `default` method.
+
+```python
+import json
+
+class MyClass:
+    """Class representing a guild configuration with species and afflictions."""
+
+    def __init__(self, name: str):
+        self.name = name
+
+    @classmethod
+    def from_dict(cls, data: dict):
+        """Create a GuildConfig instance from a dictionary."""
+        return cls(
+            name=data.get("name", ""),
+        )
+
+class GuildConfigEncoder(json.JSONEncoder):
+    def default(self, obj):
+        if isinstance(obj, MyClass):
+            return {
+                "name": obj.name
+            }
+        return json.JSONEncoder.default(self, obj)
+```
+
+Then you can use the `json.dump` function to save the data to a file.
+
+```python
+data = MyClass("John Smith")
+
+with open("data.json", "w") as f:
+    json.dump(data, f, cls=GuildConfigEncoder)
+```
+
+
+
+### Making Commands
+
+Discord.py has a built-in command system that can be used to make commands.
+
+You make commands by decorating a function with the `@self.tree.command` decorator.
+
+```python
+@self.tree.command(name="hello", description="Says hello")
+async def hello(interaction: discord.Interaction):
+    await interaction.response.send_message("Hello!")
+```
+
+You can also make commands that take arguments by adding parameters to the function. You need to describe the arguments with the `@app_commands.describe` decorator.
+
+```python
+@self.tree.command(name="hello", description="Says hello")
+@app_commands.describe(name="The name of the person to say hello to")
+async def hello(interaction: discord.Interaction,
+                name: str):  # MAKE SURE TO ADD THE ARGUMENT TO THE FUNCTION PARAMETERS!!!!
+    await interaction.response.send_message(f"Hello {name}!")
+```
+
+You can also make commands that take choices by using the `@app_commands.choices` decorator.
+A Choice is always going to be of type `app_commands.Choice[type]`.
+
+```python
+@self.tree.command(name="hello", description="Says hello")
+@app_commands.describe(name="The name of the person to say hello to")
+@app_commands.choices(name=[
+    app_commands.Choice(name="John", value="John"),
+    app_commands.Choice(name="Jane", value="Jane"),
+])
+async def hello(interaction: discord.Interaction,
+                name: app_commands.Choice[str]):  # MAKE SURE TO ADD THE ARGUMENT TO THE FUNCTION PARAMETERS!!!!
+    await interaction.response.send_message(f"Hello {name.value}!")
+```
+
+The `name` parameter is the name of the choice, and the `value` parameter is the value we receive when we select the choice.
+
+You can access information about the interaction via the `interaction` parameter.
+
+```python
+@self.tree.command(name="hello", description="Says hello")
+async def hello(interaction: discord.Interaction):
+    user = interaction.user
+    await interaction.response.send_message(f"Hello {user.name}!")
+```
