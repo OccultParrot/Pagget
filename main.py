@@ -111,13 +111,14 @@ class AfflictionEncoder(json.JSONEncoder):
 async def read_error(interaction: List[discord.Interaction], error: app_commands.AppCommandError, logger: Logger):
     if isinstance(error, app_commands.MissingPermissions):
         await interaction[0].response.send_message("You don't have permission to use this command.",
-                                                ephemeral=True)
+                                                   ephemeral=True)
     elif isinstance(error, app_commands.CommandOnCooldown):
         await interaction[0].response.send_message(error, ephemeral=True)
     else:
         logger.log(f"Error while processing command: {error}", "Bot")
         await interaction[0].response.send_message("An error occurred while rolling for afflictions",
-                                                ephemeral=True)
+                                                   ephemeral=True)
+
 
 def get_paths(directory_name: str, guild_id: int) -> (str, str):
     return os.path.join(DATA_DIRECTORY, directory_name), os.path.join(DATA_DIRECTORY, directory_name,
@@ -285,7 +286,7 @@ class AfflictionBot:
         # Commands for everyone
         @self.tree.command(name="roll-affliction", description="Rolls for standard afflictions affecting your dinosaur")
         @app_commands.describe(dino="Your dinosaur's name")
-        @app_commands.checks.cooldown(1, 60, key=lambda i: i.user.id) # Uncomment to enable cooldown
+        @app_commands.checks.cooldown(1, 60, key=lambda i: i.user.id)  # Uncomment to enable cooldown
         async def roll_affliction(interaction: discord.Interaction, dino: str):
             try:
                 afflictions: List[Affliction] = self._roll_for_afflictions(interaction.guild_id, is_minor=False)
@@ -305,7 +306,7 @@ class AfflictionBot:
                 await interaction.response.send_message(f"{dino} has the following afflictions:",
                                                         embeds=[get_affliction_embed(affliction) for affliction in
                                                                 afflictions])
-                
+
             except CommandOnCooldown as e:
                 self.logger.log(f"Command on cooldown")
                 await interaction.response.send_message(e, ephemeral=True)
@@ -318,7 +319,7 @@ class AfflictionBot:
         @self.tree.command(name="roll-minor-affliction",
                            description="Rolls for minor afflictions affecting your dinosaur")
         @app_commands.describe(dino="Your dinosaur's name")
-        @app_commands.checks.cooldown(1, 60, key=lambda i: i.user.id) # Uncomment to enable cooldown
+        @app_commands.checks.cooldown(1, 60, key=lambda i: i.user.id)  # Uncomment to enable cooldown
         async def roll_minor_affliction(interaction: discord.Interaction, dino: str):
             try:
                 afflictions: List[Affliction] = self._roll_for_afflictions(interaction.guild_id, is_minor=True)
@@ -555,6 +556,10 @@ class AfflictionBot:
         # Error handlers for slash commands
         @roll_affliction.error
         async def roll_affliction_error(interaction: discord.Interaction, error: app_commands.AppCommandError):
+            await read_error([interaction], error, self.logger)
+
+        @roll_minor_affliction.error
+        async def roll_minor_affliction_error(interaction: discord.Interaction, error: app_commands.AppCommandError):
             await read_error([interaction], error, self.logger)
 
         @list_afflictions.error
