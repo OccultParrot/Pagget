@@ -4,15 +4,18 @@ import json
 import random
 import math
 from json import JSONEncoder
-from typing import List, Optional
+from typing import List, Optional, Awaitable
 import atexit
 
 import discord
+from certifi import contents
 from discord import app_commands
 from discord.app_commands import checks
 import dotenv
+from pydantic_core.core_schema import WhenUsed
 from pygments.lexer import default
 from rich.console import Console
+from yaml import AliasEvent
 
 from logger import Logger
 from permissions import has_admin_check
@@ -47,6 +50,8 @@ class GuildConfig:
         self.species = species
         self.chance = chance
         self.minor_chance = minor_chance
+        self.lobby: dict[discord.Member, bool] = []
+        self.game_started = False
 
     def __str__(self):
         return f"{self.species.title()} ({self.chance}%)"
@@ -134,6 +139,30 @@ def get_affliction_embed(affliction: Affliction) -> discord.Embed:
         color=get_rarity_color(affliction.rarity)
     )
 
+def get_player_emoji(is_turn, is_alive) -> str:
+    """ Get the emoji of a player based on their status """
+    if is_turn:
+        return ":fearful:"
+    elif not is_alive:
+        return ":skull:"
+    return ":neutral_face:"
+
+def get_lobby_embed(lobby: dict[discord.Member, bool]) -> discord.Embed:
+    """Create a Discord embed for the lobby."""
+    embed = discord.Embed(title="Lobby", description="Current players in the lobby:")
+    embed.add_field(name="Host", value=lobby[0].name)
+    embed.add_field(name="Players", value="\n".join([member.name for member in lobby[1:]]))
+    return embed
+
+def get_game_embed(lobby: dict[discord.Member, bool], turn: int) -> discord.Embed:
+    embed = discord.Embed(title="Game")
+    embed_contents = ""
+    for i, (member, is_alive) in enumerate(lobby.items()):
+        embed_contents += f"\n{get_player_emoji(1 if turn == i else 0, is_alive)} {member.name} {"*Host*" if i == 0 else ""}\n"
+    
+    embed.add_field(name="Players", value=embed_contents)
+    
+    return embed
 
 class AfflictionBot:
     """Main bot class to handle Discord interactions and affliction management."""
@@ -269,6 +298,51 @@ class AfflictionBot:
 
     def _register_commands(self):
         """Register all Discord slash commands."""
+
+        # Games
+        @self.tree.command(name="russian-roulette", description="Starts a Russian Roulette game")
+        async def russian_roulette(interaction: discord.Interaction):
+            try:
+                if self.guild_configs[interaction.guild_id].game_started:
+                    await interaction.response.send_message("A game is already in progress.", ephemeral=True)
+                    return
+                elif len(self.guild_configs[interaction.guild_id].lobby) <= 0:
+                    await interaction.response.send_message(
+                        "Starting a game of Russian Roulette! \nRun **`/rr`** or **`/russian-roulette`** to join!.\nRun **`rr-start`** to start the game")
+                    await self._join_russian_roulette([interaction])
+                    return
+
+                await self._join_russian_roulette([interaction])
+
+            except Exception as e:
+                self.logger.log(f"Error in russian_roulette: {e}", "Bot")
+                await interaction.response.send_message("An error occurred while starting the game", ephemeral=True)
+                
+        @self.tree.command(name="rr", description="Starts a Russian Roulette game")
+        async def rr(interaction: discord.Interaction):
+            await russian_roulette(interaction)
+            
+        @self.tree.command(name="rr-start", description="Starts the Russian Roulette game")
+        async def rr_start(interaction: discord.Interaction):
+            if interaction.user != self.guild_configs[interaction.guild_id].lobby[0]:
+                await interaction.response.send_message("Only the host of the game can start a match.", ephemeral=True)
+                return
+            elif interaction.user not in self.guild_configs[interaction.guild_id].lobby:
+                await interaction.response.send_message("You are not in the lobby.", ephemeral=True)
+                return
+            elif len(self.guild_configs[interaction.guild_id].lobby) <= 1:
+                await interaction.response.send_message("You need at least 2 players to start the game.", ephemeral=True)
+                return
+            elif self.guild_configs[interaction.guild_id].game_started:
+                await interaction.response.send_message("A game is already in progress.", ephemeral=True)
+                return
+            
+            self.guild_configs[interaction.guild_id].game_started = True
+            await interaction.response.send_message("The game has started!", embed=get_game_embed(self.guild_configs[interaction.guild_id].lobby, 0))
+            
+            alive_players: list[int] = []
+            
+        
 
         # Commands for everyone
         @self.tree.command(name="roll-affliction", description="Rolls for standard afflictions affecting your dinosaur")
@@ -727,6 +801,33 @@ class AfflictionBot:
                 return affliction
 
         return None
+
+    async def _join_russian_roulette(self, interaction: List[discord.Interaction]):
+        # Refuse if:
+        # - The game is already started
+        # - The user is already in the lobby
+        # - The lobby is full
+
+        if interaction[0].user in self.guild_configs[interaction[0].guild_id].lobby:
+            self.console.print(f"[yellow]Warning: {interaction[0].user.name} is already in the lobby")
+            self.logger.log(f"{interaction[0].user.name} is already in the lobby", "Bot")
+            await interaction[0].response.send_message("You are already in the lobby", ephemeral=True)
+            return
+        elif len(self.guild_configs[interaction[0].guild_id].lobby) >= 6:
+            self.console.print(f"[yellow]Warning: Lobby is full")
+            self.logger.log(f"Lobby is full", "Bot")
+            await interaction[0].response.send_message("Lobby is full", ephemeral=True)
+            return
+        elif self.guild_configs[interaction[0].guild_id].game_started:
+            self.console.print(f"[yellow]Warning: Game is already started")
+            self.logger.log(f"Game is already started", "Bot")
+            await interaction[0].response.send_message("Game is already started", ephemeral=True)
+            return
+        self.guild_configs[interaction[0].guild_id].lobby.append(interaction[0].user)
+        await interaction[0].response.send_message(f"{interaction[0].user.name} has joined the lobby",
+                                                   embed=get_lobby_embed(
+                                                       self.guild_configs[interaction[0].guild_id].lobby))
+        return
 
     def _get_rarity_emoji(self, rarity: str) -> str:
         for r, emoji in self.rarity_list:
