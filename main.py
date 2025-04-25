@@ -11,6 +11,7 @@ import discord
 from discord import app_commands
 from discord.app_commands import checks
 import dotenv
+from discord.ext.commands import CommandOnCooldown
 from pygments.lexer import default
 from rich.console import Console
 
@@ -293,6 +294,10 @@ class AfflictionBot:
                 await interaction.response.send_message(f"{dino} has the following afflictions:",
                                                         embeds=[get_affliction_embed(affliction) for affliction in
                                                                 afflictions])
+                
+            except CommandOnCooldown as e:
+                self.logger.log(f"Command on cooldown")
+                await interaction.response.send_message(e, ephemeral=True)
 
             except Exception as e:
                 self.logger.log(f"Error in roll_affliction: {e}", "Bot")
@@ -542,6 +547,8 @@ class AfflictionBot:
             if isinstance(error, app_commands.MissingPermissions):
                 await interaction.response.send_message("You don't have permission to use this command.",
                                                         ephemeral=True)
+            elif isinstance(error, app_commands.CommandOnCooldown):
+                await interaction.response.send_message(error)
             else:
                 self.logger.log(f"Error in roll_affliction: {error}", "Bot")
                 await interaction.response.send_message("An error occurred while rolling for afflictions",
