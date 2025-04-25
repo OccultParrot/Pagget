@@ -108,6 +108,17 @@ class AfflictionEncoder(json.JSONEncoder):
         return json.JSONEncoder.default(self, obj)
 
 
+async def read_error(interaction: List[discord.Interaction], error: app_commands.AppCommandError, logger: Logger):
+    if isinstance(error, app_commands.MissingPermissions):
+        await interaction[0].response.send_message("You don't have permission to use this command.",
+                                                ephemeral=True)
+    elif isinstance(error, app_commands.CommandOnCooldown):
+        await interaction[0].response.send_message(error, ephemeral=True)
+    else:
+        logger.log(f"Error while processing command: {error}", "Bot")
+        await interaction[0].response.send_message("An error occurred while rolling for afflictions",
+                                                ephemeral=True)
+
 def get_paths(directory_name: str, guild_id: int) -> (str, str):
     return os.path.join(DATA_DIRECTORY, directory_name), os.path.join(DATA_DIRECTORY, directory_name,
                                                                       f"{guild_id}.json")
@@ -544,53 +555,23 @@ class AfflictionBot:
         # Error handlers for slash commands
         @roll_affliction.error
         async def roll_affliction_error(interaction: discord.Interaction, error: app_commands.AppCommandError):
-            if isinstance(error, app_commands.MissingPermissions):
-                await interaction.response.send_message("You don't have permission to use this command.",
-                                                        ephemeral=True)
-            elif isinstance(error, app_commands.CommandOnCooldown):
-                await interaction.response.send_message(error)
-            else:
-                self.logger.log(f"Error in roll_affliction: {error}", "Bot")
-                await interaction.response.send_message("An error occurred while rolling for afflictions",
-                                                        ephemeral=True)
+            await read_error([interaction], error, self.logger)
 
         @list_afflictions.error
         async def list_afflictions_error(interaction: discord.Interaction, error: app_commands.AppCommandError):
-            if isinstance(error, app_commands.MissingPermissions):
-                await interaction.response.send_message("You don't have permission to use this command.",
-                                                        ephemeral=True)
-            else:
-                self.logger.log(f"Error in list_afflictions: {error}", "Bot")
-                await interaction.response.send_message("An error occurred while listing afflictions", ephemeral=True)
+            await read_error([interaction], error, self.logger)
 
         @add_affliction.error
         async def add_affliction_error(interaction: discord.Interaction, error: app_commands.AppCommandError):
-            if isinstance(error, app_commands.MissingPermissions):
-                await interaction.response.send_message("You don't have permission to use this command.",
-                                                        ephemeral=True)
-            else:
-                self.logger.log(f"Error in add_affliction: {error}", "Bot")
-                await interaction.response.send_message("An error occurred while adding the affliction", ephemeral=True)
+            await read_error([interaction], error, self.logger)
 
         @remove_affliction.error
         async def remove_affliction_error(interaction: discord.Interaction, error: app_commands.AppCommandError):
-            if isinstance(error, app_commands.MissingPermissions):
-                await interaction.response.send_message("You don't have permission to use this command.",
-                                                        ephemeral=True)
-            else:
-                self.logger.log(f"Error in remove_affliction: {error}", "Bot")
-                await interaction.response.send_message("An error occurred while removing the affliction",
-                                                        ephemeral=True)
+            await read_error([interaction], error, self.logger)
 
         @set_configs.error
         async def set_configs_error(interaction: discord.Interaction, error: app_commands.AppCommandError):
-            if isinstance(error, app_commands.MissingPermissions):
-                await interaction.response.send_message("You don't have permission to use this command.",
-                                                        ephemeral=True)
-            else:
-                self.logger.log(f"Error in set_configs: {error}", "Bot")
-                await interaction.response.send_message("An error occurred while setting the guild configuration",
-                                                        ephemeral=True)
+            await read_error([interaction], error, self.logger)
 
     def _register_events(self):
         """Register Discord client events."""
