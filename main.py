@@ -795,7 +795,7 @@ class AfflictionBot:
                 self.console.print("[yellow]Debug mode enabled[/]")
                 self.logger.log("Debug mode enabled", "Bot")
                 self.client.debug = True
-            if arg.startswith("--token="):
+            if arg.startswith("--token=") and token is None:
                 token = arg.split("=")[1]
                 try:
                     with open("data/bot_token.txt", "w") as f:
