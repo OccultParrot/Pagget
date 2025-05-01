@@ -587,11 +587,7 @@ class AfflictionBot:
             self.console.rule(f"{self.client.user.name}")
 
             self.console.print(f"Bot activated as {self.client.user}")
-            if any(arg == "-P" for arg in sys.argv):
-                self.console.print("Running in [green]production[/] mode")
 
-            else:
-                self.console.print("Running in [yellow]development[/] mode")
             self.logger.log(f"{self.client.user.name} has logged in as {self.client.user}", "Bot")
 
             self.console.print("\nConnected Guilds:")
@@ -785,13 +781,34 @@ class AfflictionBot:
     def run(self):
         """Run the Discord bot."""
         atexit.register(self._exit_handler)
+        token = None
 
-        if any(arg == "-P" for arg in sys.argv):
-            token = os.getenv("PRODUCTION_TOKEN")
-        else:
-            token = os.getenv("TEST_TOKEN")
-        if not token:
-            self.console.print("[red bold]Error: Discord TOKEN not found in environment variables")
+        # First try to get token from data/bot_token.txt
+        try:
+            with open("data/bot_token.txt", "r") as f:
+                token = f.read().strip()
+        except FileNotFoundError:
+            self.console.print("[red]Error: bot_token.txt not found. Attempting checking args.")
+
+        for arg in sys.argv:
+            if arg == "--debug":
+                self.console.print("[yellow]Debug mode enabled[/]")
+                self.logger.log("Debug mode enabled", "Bot")
+                self.client.debug = True
+            if arg.startswith("--token="):
+                token = arg.split("=")[1]
+                try:
+                    with open("data/bot_token.txt", "w") as f:
+                        f.write(token)
+                    self.console.print("[green]Token saved to data/bot_token.txt[/]")
+                    self.logger.log("Token saved to data/bot_token.txt", "Bot")
+                except Exception as e:
+                    self.console.print(f"[red]Error saving token to data/bot_token.txt: {e}")
+                    self.logger.log(f"Error saving token to data/bot_token.txt: {e}", "Bot")
+                break
+
+        if token is None:
+            self.console.print("[red]Error: No token provided. Use --token=YOUR Token")
             exit(1)
 
         self.client.run(token)
