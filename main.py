@@ -795,7 +795,7 @@ class AfflictionBot:
                 self.console.print("[yellow]Debug mode enabled[/]")
                 self.logger.log("Debug mode enabled", "Bot")
                 self.client.debug = True
-            if arg.startswith("--token=") and token is None:
+            elif arg.startswith("--token="):
                 token = arg.split("=")[1]
                 try:
                     with open("data/bot_token.txt", "w") as f:
@@ -808,8 +808,22 @@ class AfflictionBot:
                 break
 
         if token is None:
-            self.console.print("[red]Error: No token provided. Use --token=YOUR Token")
-            exit(1)
+            token = input("Enter your bot token > ")
+            if token == "":
+                self.console.print("[red]Error: No token provided")
+                self.logger.log("No token provided", "Bot")
+            else:
+                try:
+                    with open("data/bot_token.txt", "w") as f:
+                        f.write(token)
+                    self.console.print("[green]Token saved to data/bot_token.txt[/]")
+                    self.logger.log("Token saved to data/bot_token.txt", "Bot")
+                except Exception as e:
+                    self.console.print(f"[red]Error saving token to data/bot_token.txt: {e}")
+                    self.logger.log(f"Error saving token to data/bot_token.txt: {e}", "Bot")
+            if not token:
+                self.console.print("[red]Error: No token provided. Use --token=YOUR Token to set it, or remove the bot_token.txt file to be prompted for it.")
+                exit(1)
 
         self.client.run(token)
 
