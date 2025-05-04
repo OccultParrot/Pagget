@@ -3,6 +3,7 @@ import sys
 import json
 import random
 import math
+import requests
 from json import JSONEncoder
 from typing import List, Optional
 import atexit
@@ -12,7 +13,6 @@ from discord import app_commands
 from discord.app_commands import checks
 import dotenv
 from discord.ext.commands import CommandOnCooldown
-from pygments.lexer import default
 from rich.console import Console
 
 from logger import Logger
@@ -147,6 +147,30 @@ def get_affliction_embed(affliction: Affliction) -> discord.Embed:
         color=get_rarity_color(affliction.rarity)
     )
 
+def validate_discord_token(token: str) -> bool:
+    """ Validates a given Discord token """
+    if not token:
+        return False
+    
+    url = "https://discord.com/api/v10/users/@me"
+    headers = {"Authorization": f"Bot {token}"}
+    
+    try:
+        response = requests.get(url, headers=headers)
+        if response.status_code != 200:
+            return False
+        
+        data = response.json()
+        print(f"Token is valid! Bot name: {data.get('username')}")
+        return True
+    except Exception as e:
+        print("Error validating token:", e)
+        return False
+        
+        
+        
+    
+    
 
 class AfflictionBot:
     """Main bot class to handle Discord interactions and affliction management."""
@@ -753,6 +777,20 @@ class AfflictionBot:
                 self.logger.log(f"Error creating directory: {e}", "Json")
                 return False  # Return if directory creation fails
         return True
+    
+    def _write_token_file(self, token: str):
+        
+        if not self._validate_directory("data/"):
+            return
+        
+        try:
+            with open("data/bot_token.txt", "w") as f:
+                f.write(token)
+            self.console.print("[green]Token saved to data/bot_token.txt[/]")
+            self.logger.log("Token saved to data/bot_token.txt", "Bot")
+        except Exception as e:
+            self.console.print(f"[red]Error saving token to data/bot_token.txt: {e}")
+            self.logger.log(f"Error saving token to data/bot_token.txt: {e}", "Bot")
 
     def _exit_handler(self):
         self.console.print("\n[red]Bot shutting down...[/]")
@@ -787,8 +825,11 @@ class AfflictionBot:
         try:
             with open("data/bot_token.txt", "r") as f:
                 token = f.read().strip()
+                if not validate_discord_token(token):
+                    self.console.print("[red]Token file holds invalid Discord token, checking args. If args do not contain '--token=' then collecting manual input.[/]")
+                    token = None
         except FileNotFoundError:
-            self.console.print("[red]Error: bot_token.txt not found. Attempting checking args.")
+            self.console.print("[yellow]Token file not found, checking args. If args do not contain '--token=' then collecting manual input.[/]")
 
         for arg in sys.argv:
             if arg == "--debug":
@@ -797,33 +838,27 @@ class AfflictionBot:
                 self.client.debug = True
             elif arg.startswith("--token="):
                 token = arg.split("=")[1]
-                try:
-                    with open("data/bot_token.txt", "w") as f:
-                        f.write(token)
-                    self.console.print("[green]Token saved to data/bot_token.txt[/]")
-                    self.logger.log("Token saved to data/bot_token.txt", "Bot")
-                except Exception as e:
-                    self.console.print(f"[red]Error saving token to data/bot_token.txt: {e}")
-                    self.logger.log(f"Error saving token to data/bot_token.txt: {e}", "Bot")
+                
+                if not validate_discord_token(token):
+                    token = None
+                    self.console.print("[red]Invalid token. Please enter your token.[/]")
+                    break
+                    
+                self._write_token_file(token)
                 break
 
         if token is None:
-            token = input("Enter your bot token > ")
-            if token == "":
-                self.console.print("[red]Error: No token provided")
-                self.logger.log("No token provided", "Bot")
-            else:
-                try:
-                    with open("data/bot_token.txt", "w") as f:
-                        f.write(token)
-                    self.console.print("[green]Token saved to data/bot_token.txt[/]")
-                    self.logger.log("Token saved to data/bot_token.txt", "Bot")
-                except Exception as e:
-                    self.console.print(f"[red]Error saving token to data/bot_token.txt: {e}")
-                    self.logger.log(f"Error saving token to data/bot_token.txt: {e}", "Bot")
-            if not token:
-                self.console.print("[red]Error: No token provided. Use --token=YOUR Token to set it, or remove the bot_token.txt file to be prompted for it.")
-                exit(1)
+            while True:
+                token = input("Enter your bot token > ")
+                if token == "":
+                    self.console.print("[red]Error: No token provided")
+                    self.logger.log("No token provided", "Bot")
+                    continue
+                    
+                if validate_discord_token(token):
+                    self._write_token_file(token)
+                    break
+                print("Invalid token")
 
         self.client.run(token)
 
