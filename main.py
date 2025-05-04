@@ -143,7 +143,7 @@ def get_affliction_embed(affliction: Affliction) -> discord.Embed:
     """Create a Discord embed for an affliction."""
     return discord.Embed(
         title=affliction.name.title(),
-        description=f"-# {affliction.rarity.title()}\n{"-# *Minor Affliction*" if affliction.is_minor else ""}\n\n{affliction.description}",
+        description=f"-# {affliction.rarity.title()} \n {'-# *Minor Affliction*' if affliction.is_minor else ''}\n\n{affliction.description}",
         color=get_rarity_color(affliction.rarity)
     )
 
