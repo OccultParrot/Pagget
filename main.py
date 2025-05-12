@@ -595,19 +595,19 @@ class AfflictionBot:
 
         @berries_group.command(name="hunt", description="Hunt for some berries")
         async def hunt(interaction: discord.Interaction):
-
             # TODO: Implement berry hunt logic
             # 1. Validate user's participation 
             # 2. Generate random berry rewards
             # 3. Update user's balance
             # 4. Create an informative response about the hunt
 
-            self.balances_dict[interaction.user.id] = self._validate_user(interaction.user.id, interaction.guild_id) + random.randint(1, 10)  # Example reward
+            self.balances_dict[interaction.user.id] = self._validate_user(interaction.user.id,
+                                                                          interaction.guild_id) + random.randint(1,
+                                                                                                                 10)  # Example reward
             await interaction.response.send_message(f"You went on a berry hunt! (Placeholder)", ephemeral=False)
 
         @berries_group.command(name="balance", description="Check your berry balance")
         async def balance(interaction: discord.Interaction):
-
             # Retrieve user's current balance
             current_balance = self._validate_user(interaction.user.id, interaction.guild_id)
 
@@ -823,13 +823,15 @@ class AfflictionBot:
 
         return None
 
-    def _get_rarity_emoji(self, rarity: str) -> str:
-        for r, emoji in self.rarity_list:
-            if rarity.lower() == r.lower():
-                return f":{emoji}:"
-
-        else:
-            return ""
+    def _roll_for_hunting_occurrence(self, guild_id: int) -> HuntOutcome:
+        """
+        Roll for a hunting occurrence based on the configured chance.
+        
+        Returns:
+            A HuntOutcome object representing the outcome of the hunt
+        """
+        
+        
 
     def _get_affliction_from_name(self, affliction_name: str, guild_id: int) -> (Affliction, int):
         """

@@ -4,10 +4,11 @@ import json
 class HuntOutcome:
     """Class representing a hunt outcome with title, value, and description."""
 
-    def __init__(self, title: str, value: str, description: str):
+    def __init__(self, title: str, value: str, description: str, rarity: str):
         self.title = title
         self.value = value
         self.description = description
+        self.rarity = rarity
 
     def __str__(self):
         return f"{self.title} - {self.value}"
@@ -18,7 +19,8 @@ class HuntOutcome:
         return cls(
             title=data.get("title", ""),
             value=data.get("value", ""),
-            description=data.get("description", "")
+            description=data.get("description", ""),
+            rarity=data.get("rarity", "")
         )
 
 
@@ -28,6 +30,7 @@ class HuntOutcomeEncoder(json.JSONEncoder):
             return {
                 "title": obj.title,
                 "value": obj.value,
-                "description": obj.description
+                "description": obj.description,
+                "rarity": obj.rarity
             }
         return json.JSONEncoder.default(self, obj)
