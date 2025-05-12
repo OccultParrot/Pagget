@@ -2,6 +2,25 @@
   {
     "title": "Example",
     "value": 100,
-    "description": "This is an example of a hunt outcome."
+    "description": "You found a bush full of ripe berries",
+    "rarity": "common"
+  },
+  {
+    "title": "Example",
+    "value": 100,
+    "description": "You found a bush full of ripe berries",
+    "rarity": "uncommon"
+  },
+  {
+    "title": "Example",
+    "value": 100,
+    "description": "You found a bush full of ripe berries",
+    "rarity": "rare"
+  },
+  {
+    "title": "Example",
+    "value": 100,
+    "description": "You found a bush full of ripe berries",
+    "rarity": "ultra rare"
   }
 ]
