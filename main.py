@@ -3,13 +3,6 @@ TODO:
 - Write /berry hunt
 - Write /berry balance
 - Save and load guild member balances, maybe just save user configs so the currency can be used across servers?
-- Save and load guild hunt outcomes.
-Example:
-{
-    "title": "Empty Bush",
-    "value": "10",
-    "description": "All you can find is a bare bush with a few berries on it."
-}
 - Write /berry steal.
 
 after all that is done, THEN we write the gambling part
@@ -106,6 +99,8 @@ class AfflictionBot:
 
     afflictions_dict: dict[int, List[Affliction]]
     guild_configs: dict[int, GuildConfig]
+    hunt_outcomes_dict: dict[int, List[HuntOutcome]]
+    balances_dict: dict[int, int]
 
     def __init__(self):
         """Initialize the bot with required configurations and load afflictions."""
@@ -138,29 +133,11 @@ class AfflictionBot:
 
         affliction_directory, affliction_path = get_paths("afflictions", guild_id)
 
-        # if not self._validate_directory(affliction_directory):
-        #     return []  # Return empty list if directory creation fails
-        # 
-        # # Use default file if guild-specific file doesn't exist
-        # if not os.path.exists(affliction_path):
-        #     self.console.print(f"[yellow]Warning: {affliction_path} not found. Using default afflictions.")
-        #     self.logger.log(f"{affliction_path} not found. Using default afflictions.", "Json")
-        #     affliction_path = "afflictions.default.json"
-        # 
-        #     # If even default file doesn't exist, create an empty file
-        #     if not os.path.exists(affliction_path):
-        #         self.console.print(f"[yellow]Warning: Default affliction file not found. Creating empty file")
-        #         self.logger.log(f"Default affliction file not found. Creating empty file", "Json")
-        #         try:
-        #             with open(affliction_path, 'w') as f:
-        #                 json.dump([], f)
-        #         except Exception as e:
-        #             self.console.print(f"[red bold]Error creating default affliction file: {e}")
-        #             self.logger.log(f"Error creating default affliction file: {e}", "Json")
-        #             return []  # Return empty list if file creation fails
-
-        if not self._validate_json_load(affliction_directory, affliction_path, "afflictions.default.json"):
+        affliction_path, valid = self._validate_json_load(affliction_directory, affliction_path,
+                                                          "defaults/afflictions.default.json")
+        if not valid:
             return []
+
         try:
             with open(affliction_path, 'r') as f:
                 raw_data = json.load(f)
@@ -227,7 +204,55 @@ class AfflictionBot:
         :return: 
             A list of HuntOutcome objects
         """
-        # TODO: Finsh this function
+        outcome_directory, outcome_path = get_paths("hunt_outcomes", guild_id)
+        outcome_path, valid = self._validate_json_load(outcome_directory, outcome_path,
+                                                       "defaults/hunt_outcomes.default.json")
+        if not valid:
+            return []
+
+        try:
+            with open(outcome_path, 'r') as f:
+                raw_data = json.load(f)
+
+                outcomes: List[HuntOutcome] = []
+                for item in raw_data:
+                    if not all(key in item for key in ["title", "value", "description"]):
+                        self.console.print(f"[yellow]Warning: Skipping invalid outcome entry: {item}")
+                        self.logger.log(f"Skipping invalid outcome entry: {item}", "Json")
+                        continue
+
+                    outcome: HuntOutcome = HuntOutcome.from_dict(item)
+                    outcomes.append(outcome)
+
+                self.console.print(f"[green]Loaded {len(outcomes)} outcomes from {outcome_path}")
+                return outcomes
+
+        except FileNotFoundError:
+            self.console.print(f"[red bold]Error: {outcome_path} not found")
+            self.logger.log(f"Error: {outcome_path} not found", "Json")
+            return []  # Return empty list if file not found
+
+    def _load_json_balances(self):
+        """
+        Loads everyone's balances from a JSON file.
+        :return: 
+            A dictionary of user IDs and their balances
+        """
+        balances_directory, balances_path = get_paths("balances", 0)
+        balances_path, valid = self._validate_json_load(balances_directory, balances_path,
+                                                        "defaults/balances.default.json")
+        if not valid:
+            return {}
+
+        try:
+            with open(balances_path, 'r') as f:
+                raw_data = json.load(f)
+                return raw_data
+
+        except FileNotFoundError:
+            self.console.print(f"[red bold]Error: {balances_path} not found")
+            self.logger.log(f"Error: {balances_path} not found", "Json")
+            return {}
 
     def _save_json(self, guild_id: int, directory_name: str, data: any, cls: JSONEncoder | None = None) -> None:
         directory, path = get_paths(directory_name, guild_id)
@@ -589,6 +614,19 @@ class AfflictionBot:
             self.afflictions_dict = {guild.id: self._load_json_afflictions(guild.id) for guild in self.client.guilds}
             self.console.print(f"[green]Loaded[/] {len(self.afflictions_dict)} [green]guild(s) with afflictions")
 
+            # Load hunt outcomes for each guild
+            self.console.print("\n[green]Loading hunt outcomes...[/]")
+            self.logger.log("Loading hunt outcomes...", "Bot")
+            self.hunt_outcomes_dict = {guild.id: self._load_json_outcomes(guild.id) for guild in self.client.guilds}
+            self.console.print(f"[green]Loaded[/] {len(self.hunt_outcomes_dict)} [green]guild(s) with hunt outcomes")
+
+            # Load balances of each user
+            self.console.print("\n[green]Loading user balances...[/]")
+            self.logger.log("Loading user balances...", "Bot")
+            self.balances_dict = self._load_json_balances()
+            self.console.print(f"[green]Loaded[/] {len(self.balances_dict)} [green]user balances")
+            self.console.print("[green]User balances loaded[/]")
+
             # Load guild configurations
             self.console.print("\n[green]Loading guild configurations...[/]")
             self.logger.log("Loading guild configurations...", "Bot")
@@ -739,9 +777,9 @@ class AfflictionBot:
                 return False  # Return if directory creation fails
         return True
 
-    def _validate_json_load(self, directory: str, path: str, default_path: str) -> bool:
+    def _validate_json_load(self, directory: str, path: str, default_path: str) -> tuple[str, bool]:
         if not self._validate_directory(directory):
-            return False
+            return path, False
 
         if not os.path.exists(path):
             self.console.print(f"[yellow]Warning: {path} not found. Using default values.")
@@ -757,9 +795,16 @@ class AfflictionBot:
                 except Exception as e:
                     self.console.print(f"[red bold]Error creating default file: {e}")
                     self.logger.log(f"Error creating default file: {e}", "Json")
-                    return False
+                    return path, False
 
-        return True
+        return path, True
+
+    def _validate_user(self, user_id: int):
+        if user_id in self.balances_dict:
+            return self.balances_dict[user_id]
+
+        self.balances_dict[user_id] = 0
+        return 0
 
     def _write_token_file(self, token: str):
 
@@ -798,6 +843,24 @@ class AfflictionBot:
 
             self.console.print("[green]Guild configurations saved[/]")
             self.logger.log("Guild configurations saved", "Bot")
+
+        if hasattr(self, "hunt_outcomes_dict") and self.hunt_outcomes_dict:
+            self.console.print("\n[green]Saving hunt outcomes...[/]")
+            for guild_id in self.hunt_outcomes_dict:
+                self.console.print(f"  • Saving for guild {guild_id}")
+                self.logger.log(f"    Saving hunt outcomes for guild {guild_id}", "Bot")
+                self._save_json(guild_id, "hunt_outcomes", self.hunt_outcomes_dict[guild_id], cls=HuntOutcomeEncoder)
+
+            self.console.print("[green]Hunt outcomes saved[/]")
+            self.logger.log("Hunt outcomes saved", "Bot")
+
+        if hasattr(self, "balances_dict") and self.balances_dict:
+            self.console.print("\n[green]Saving user balances...[/]")
+            self.logger.log("Saving user balances...", "Bot")
+            self._save_json(0, "balances", self.balances_dict)
+
+            self.console.print("[green]User balances saved[/]")
+            self.logger.log("User balances saved", "Bot")
 
     def run(self):
         """Run the Discord bot."""
