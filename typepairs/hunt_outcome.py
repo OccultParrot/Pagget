@@ -4,7 +4,7 @@ import json
 class HuntOutcome:
     """Class representing a hunt outcome with title, value, and description."""
 
-    def __init__(self, title: str, value: str, description: str, rarity: str):
+    def __init__(self, title: str, value: int, description: str, rarity: str):
         self.title = title
         self.value = value
         self.description = description
