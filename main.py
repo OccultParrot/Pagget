@@ -73,6 +73,21 @@ def get_affliction_embed(affliction: Affliction) -> discord.Embed:
     )
 
 
+def get_outcome_embed(outcome: HuntOutcome, old_balance: int, new_balance: int,
+                      interaction: discord.Interaction) -> discord.Embed:
+    """Create a Discord embed for a hunt outcome."""
+    embed = discord.Embed(
+        title="Successful Hunt!" if outcome.value > 0 else "Failed Hunt!",
+        description=f"{outcome.description} {'and got' if outcome.value > 0 else 'and lost'} *{abs(outcome.value)}* berries{'!' if outcome.value > 0 else '.'}",
+        color=get_rarity_color(outcome.rarity)
+    )
+    embed.set_author(name=interaction.user.display_name, icon_url=interaction.user.avatar.url)
+
+    embed.set_footer(text=f"{new_balance} total berries")
+
+    return embed
+
+
 def validate_discord_token(token: str) -> bool:
     """ Validates a given Discord token """
     if not token:
@@ -295,7 +310,8 @@ class AfflictionBot:
                 if len(afflictions) == 1:
                     await interaction.response.send_message(
                         f"{dino} has **{afflictions[0].name}**.",
-                        embed=get_affliction_embed(afflictions[0]))
+                        embed=get_affliction_embed(afflictions[0])
+                    )
                     return
 
                 await interaction.response.send_message(f"{dino} has the following afflictions:",
@@ -595,16 +611,13 @@ class AfflictionBot:
 
         @berries_group.command(name="hunt", description="Hunt for some berries")
         async def hunt(interaction: discord.Interaction):
-            # TODO: Implement berry hunt logic
-            # 1. Validate user's participation 
-            # 2. Generate random berry rewards
-            # 3. Update user's balance
-            # 4. Create an informative response about the hunt
+            old_balance = self._validate_user(interaction.user.id, interaction.guild_id)
+            outcome: HuntOutcome = self._roll_for_hunting_occurrence(interaction.guild_id)
+            self.balances_dict[interaction.user.id] += outcome.value
 
-            self.balances_dict[interaction.user.id] = self._validate_user(interaction.user.id,
-                                                                          interaction.guild_id) + random.randint(1,
-                                                                                                                 10)  # Example reward
-            await interaction.response.send_message(f"You went on a berry hunt! (Placeholder)", ephemeral=False)
+            await interaction.response.send_message(
+                embed=get_outcome_embed(outcome, old_balance, self.balances_dict[interaction.user.id], interaction),
+                ephemeral=False)
 
         @berries_group.command(name="balance", description="Check your berry balance")
         async def balance(interaction: discord.Interaction):
@@ -830,8 +843,22 @@ class AfflictionBot:
         Returns:
             A HuntOutcome object representing the outcome of the hunt
         """
-        
-        
+        commons = [outcome for outcome in self.hunt_outcomes_dict[guild_id] if outcome.rarity.lower() == "common"]
+        uncommons = [outcome for outcome in self.hunt_outcomes_dict[guild_id] if outcome.rarity.lower() == "uncommon"]
+        rares = [outcome for outcome in self.hunt_outcomes_dict[guild_id] if outcome.rarity.lower() == "rare"]
+        ultra_rares = [outcome for outcome in self.hunt_outcomes_dict[guild_id] if
+                       outcome.rarity.lower() == "ultra rare"]
+
+        rarity_groups = [commons, uncommons, rares, ultra_rares]
+        rarity_weights = [60, 25, 10, 5]
+
+        if sum(rarity_weights) != 100:
+            self.console.print("[red]Error: Rarity weights must sum to 100")
+            self.logger.log("[red]Error: Rarity weights must sum to 100")
+            return None
+
+        selected_group = random.choices(rarity_groups, weights=rarity_weights, k=1)[0]
+        return random.choice(selected_group)
 
     def _get_affliction_from_name(self, affliction_name: str, guild_id: int) -> (Affliction, int):
         """
