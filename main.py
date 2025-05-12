@@ -242,11 +242,17 @@ class AfflictionBot:
         balances_path, valid = self._validate_json_load(balances_directory, balances_path,
                                                         "defaults/balances.default.json")
         if not valid:
-            return {}
+            return {}  # Return an empty dictionary
 
         try:
             with open(balances_path, 'r') as f:
                 raw_data = json.load(f)
+
+                # Ensure raw_data is a dictionary
+                if not isinstance(raw_data, dict):
+                    self.console.print("[yellow]Warning: Balances file is not in dictionary format. Converting...")
+                    raw_data = {}
+
                 return raw_data
 
         except FileNotFoundError:
@@ -385,19 +391,6 @@ class AfflictionBot:
 
         # endregion
 
-        # region [collapsed] Berry Commands
-        berries_group = app_commands.Group(name="berries", description="Berry commands")
-
-        @berries_group.command(name="hunt", description="Hunt for some berries")
-        async def hunt(interaction: discord.Interaction):
-            pass
-
-        @berries_group.command(name="balance", description="Tells you how many berries you have")
-        async def balance(interaction: discord.Interaction):
-            pass
-
-        # endregion
-
         # region [collapsed] Admin Commands
 
         ## Affliction Admin Commands
@@ -530,7 +523,7 @@ class AfflictionBot:
                                minor_chance="Percent chance of rolling minor afflictions (0-100)")
         @app_commands.checks.has_permissions(administrator=True)
         async def set_configs(interaction: discord.Interaction, species: str = None, chance: int = None,
-                              minor_chance: bool = None):
+                              minor_chance: bool = None, starting_pay: int = None):
             try:
                 if species is not None:
                     self.guild_configs[interaction.guild_id].species = species
@@ -538,6 +531,8 @@ class AfflictionBot:
                     self.guild_configs[interaction.guild_id].chance = chance
                 if minor_chance is not None:
                     self.guild_configs[interaction.guild_id].minor_chance = minor_chance
+                if starting_pay is not None:
+                    self.guild_configs[interaction.guild_id].starting_pay = starting_pay
 
                 embed = discord.Embed(title=f"{interaction.guild.name}'s Configuration",
                                       description="Guild configuration has been updated.")
@@ -546,6 +541,8 @@ class AfflictionBot:
                                 inline=False)
                 embed.add_field(name="Minor Affliction Chance",
                                 value=f"{self.guild_configs[interaction.guild_id].minor_chance}%", inline=False)
+                embed.add_field(name="Starting Pay", value=f"{self.guild_configs[interaction.guild_id].starting_pay}",
+                                inline=False)
 
                 self._save_json(interaction.guild_id, "guild_configs", self.guild_configs[interaction.guild_id],
                                 cls=GuildConfigEncoder)
@@ -587,6 +584,43 @@ class AfflictionBot:
             await read_error([interaction], error, self.logger)
 
         # endregion
+
+        self._register_berry_commands()
+
+    def _register_berry_commands(self):
+        """Register berry-related commands as a command group."""
+
+        # Create the berries group and add it to the command tree
+        berries_group = app_commands.Group(name="berries", description="Berry commands")
+
+        @berries_group.command(name="hunt", description="Hunt for some berries")
+        async def hunt(interaction: discord.Interaction):
+
+            # TODO: Implement berry hunt logic
+            # 1. Validate user's participation 
+            # 2. Generate random berry rewards
+            # 3. Update user's balance
+            # 4. Create an informative response about the hunt
+
+            self.balances_dict[interaction.user.id] = self._validate_user(interaction.user.id, interaction.guild_id) + random.randint(1, 10)  # Example reward
+            await interaction.response.send_message(f"You went on a berry hunt! (Placeholder)", ephemeral=False)
+
+        @berries_group.command(name="balance", description="Check your berry balance")
+        async def balance(interaction: discord.Interaction):
+
+            # Retrieve user's current balance
+            current_balance = self._validate_user(interaction.user.id, interaction.guild_id)
+
+            embed = discord.Embed(
+                title="🍒 Berry Balance",
+                description=f"You currently have **{current_balance}** berries.",
+                color=discord.Color.blue()
+            )
+
+            await interaction.response.send_message(embed=embed, ephemeral=False)
+
+        # Add the group to the command tree
+        self.tree.add_command(berries_group)
 
     def _register_events(self):
         """Register Discord client events."""
@@ -644,18 +678,67 @@ class AfflictionBot:
                 self.console.print("[green]Command tree synced[/]")
                 self.logger.log("Command tree synced", "Bot")
 
-            # List all registered commands
-            self.console.print("\nRegistered Commands:")
-            self.console.print("Commands in purple are admin-only")
-            self.logger.log("Registered Commands:", "Bot")
-            for command in self.tree.get_commands():
+            elif any(arg == "--sync-guild" for arg in sys.argv):
+                self.console.print("\nPlease select a guild to sync the command tree with:")
+                for i, guild in enumerate(self.client.guilds):
+                    self.console.print(f"  • [green]{i + 1}[/] {guild.name} ({guild.id})")
 
-                if has_admin_check(command):
-                    self.console.print(f"  • [purple]{command.name}[/] - {command.description}")
-                    self.logger.log(f"    * Command: {command.name}  ADMIN ONLY - {command.description}", "Bot")
+                guild_index = int(input("Enter the number of the guild to sync with: ")) - 1
+                if 0 <= guild_index < len(self.client.guilds):
+                    guild = self.client.guilds[guild_index]
+                    self.console.print(f"Syncing command tree with {guild.name} ({guild.id})...")
+                    bot.tree.clear_commands(guild=guild)
+                    self.tree.copy_global_to(guild=guild)
+                    await self.tree.sync(guild=guild)
+                    self.console.print(f"Command tree synced with {guild.name} ({guild.id})")
                 else:
-                    self.console.print(f"  • [green]{command.name}[/] - {command.description}")
-                    self.logger.log(f"    * Command: {command.name} - {command.description}", "Bot")
+                    self.console.print("[red]Invalid guild number. Syncing aborted.[/]")
+                    self.logger.log("Invalid guild number. Syncing aborted.", "Bot")
+
+            # List all registered commands
+            self.console.print("\n[bold underline]Registered Commands:[/]")
+            self.logger.log("Registered Commands:", "Bot")
+
+            # Separate groups and standalone commands
+            groups = {}
+            standalone_commands = []
+
+            for command in self.tree.get_commands():
+                if isinstance(command, app_commands.Group):
+                    groups[command.name] = command
+                else:
+                    standalone_commands.append(command)
+
+            # Print command groups
+            if groups:
+                self.console.print("\n[green bold]Command Groups:[/]")
+                for group_name, group in sorted(groups.items()):
+                    admin_status = "[purple]ADMIN[/]" if has_admin_check(group) else "[green]USER[/]"
+                    self.console.print(f"  [bold]/{group_name}[/] {admin_status} - {group.description}")
+                    self.logger.log(f"  Group: {group_name} - {group.description}", "Bot")
+
+                    # Print subcommands within the group
+                    for subcommand in group.commands:
+                        subcommand_admin = "[purple]ADMIN[/]" if has_admin_check(subcommand) else "[green]USER[/]"
+                        self.console.print(
+                            f"    • [bold]{subcommand.name}[/] {subcommand_admin} - {subcommand.description}")
+                        self.logger.log(f"    Subcommand: {group_name} {subcommand.name} - {subcommand.description}",
+                                        "Bot")
+
+            # Print standalone commands
+            if standalone_commands:
+                self.console.print("\n[green bold]Standalone Commands:[/]")
+                for command in sorted(standalone_commands, key=lambda x: x.name):
+                    admin_status = "[purple]ADMIN[/]" if has_admin_check(command) else "[green]USER[/]"
+                    self.console.print(f"  [bold]/{command.name}[/] {admin_status} - {command.description}")
+                    self.logger.log(f"  Command: {command.name} - {command.description}", "Bot")
+
+        @self.client.event
+        async def on_message(message: discord.Message):
+            if message.author == self.client.user:
+                return
+                # Handle messages here if needed
+            pass  # TODO: Remove pass when implementing message handling
 
     def _roll_for_afflictions(self, guild_id: int, is_minor: bool = False) -> List[Affliction]:
         """
@@ -799,12 +882,15 @@ class AfflictionBot:
 
         return path, True
 
-    def _validate_user(self, user_id: int):
+    def _validate_user(self, user_id: int, guild_id: int) -> int:
+        """ Returns the balance of the user, and sets users balance to the guilds starting balance from configs """
         if user_id in self.balances_dict:
             return self.balances_dict[user_id]
 
-        self.balances_dict[user_id] = 0
-        return 0
+        self.balances_dict[user_id] = self.guild_configs[guild_id].starting_pay
+        self.console.print("User balance created:", user_id)
+        self.logger.log(f"User balance created: {user_id}", "Bot")
+        return self.guild_configs[guild_id].starting_pay
 
     def _write_token_file(self, token: str):
 
