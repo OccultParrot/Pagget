@@ -27,133 +27,17 @@ import atexit
 
 import discord
 from discord import app_commands
-from discord.app_commands import checks
 import dotenv
 from discord.ext.commands import CommandOnCooldown
 from rich.console import Console
 
 from logger import Logger
 from permissions import has_admin_check
+from typepairs import Affliction, AfflictionEncoder, GuildConfig, GuildConfigEncoder, HuntOutcome, HuntOutcomeEncoder
 
 # Constants
-AFFLICTION_CHANCE = 25  # Percentage chance to roll for an affliction
 DATA_DIRECTORY = "data"
 LOG_FILE = "log.txt"
-
-""" Error Classes """
-
-
-class AfflictionBotError(Exception):
-    """ Base exception for AfflictionBot errors """
-    pass
-
-
-class AfflictionDirectoryError(AfflictionBotError):
-    """ Exception raised when there are issues with the affliction directory """
-    pass
-
-
-class AfflictionFileError(AfflictionBotError):
-    """ Exception raised when there are issues with the affliction files """
-    pass
-
-
-class GuildConfig:
-    """Class representing a guild configuration with species and afflictions."""
-
-    def __init__(self, species: str, chance: int = AFFLICTION_CHANCE, minor_chance: int = AFFLICTION_CHANCE + 10):
-        self.species = species
-        self.chance = chance
-        self.minor_chance = minor_chance
-
-    def __str__(self):
-        return f"{self.species.title()} ({self.chance}%)"
-
-    @classmethod
-    def from_dict(cls, data: dict):
-        """Create a GuildConfig instance from a dictionary."""
-        return cls(
-            species=data.get("species", ""),
-            chance=data.get("chance", AFFLICTION_CHANCE),
-            minor_chance=data.get("minor_chance", AFFLICTION_CHANCE + 10)
-        )
-
-
-class GuildConfigEncoder(json.JSONEncoder):
-    def default(self, obj):
-        if isinstance(obj, GuildConfig):
-            return {
-                "species": obj.species,
-                "chance": obj.chance,
-                "minor_chance": obj.minor_chance
-            }
-        return json.JSONEncoder.default(self, obj)
-
-
-class Affliction:
-    """Class representing an affliction with name, description, and rarity."""
-
-    def __init__(self, name: str, description: str, rarity: str, is_minor: bool = False):
-        self.name = name
-        self.description = description
-        self.rarity = rarity
-        self.is_minor = is_minor
-
-    def __str__(self):
-        return f"{self.name.title()}"
-
-    @classmethod
-    def from_dict(cls, data: dict):
-        """Create an Affliction instance from a dictionary."""
-        return cls(
-            name=data.get("name", ""),
-            description=data.get("description", ""),
-            rarity=data.get("rarity", ""),
-            is_minor=data.get("is_minor", False)
-        )
-
-
-class AfflictionEncoder(json.JSONEncoder):
-    def default(self, obj):
-        if isinstance(obj, Affliction):
-            return {
-                "name": obj.name,
-                "description": obj.description,
-                "rarity": obj.rarity,
-                "is_minor": obj.is_minor
-            }
-        return json.JSONEncoder.default(self, obj)
-    
-
-class HuntOutcome:
-    """Class representing a hunt outcome with title, value, and description."""
-
-    def __init__(self, title: str, value: str, description: str):
-        self.title = title
-        self.value = value
-        self.description = description
-
-    def __str__(self):
-        return f"{self.title} - {self.value}"
-
-    @classmethod
-    def from_dict(cls, data: dict):
-        """Create a HuntOutcome instance from a dictionary."""
-        return cls(
-            title=data.get("title", ""),
-            value=data.get("value", ""),
-            description=data.get("description", "")
-        )
-    
-class HuntOutcomeEncoder(json.JSONEncoder):
-    def default(self, obj):
-        if isinstance(obj, HuntOutcome):
-            return {
-                "title": obj.title,
-                "value": obj.value,
-                "description": obj.description
-            }
-        return json.JSONEncoder.default(self, obj)
 
 
 async def read_error(interaction: List[discord.Interaction], error: app_commands.AppCommandError, logger: Logger):
@@ -254,27 +138,29 @@ class AfflictionBot:
 
         affliction_directory, affliction_path = get_paths("afflictions", guild_id)
 
-        if not self._validate_directory(affliction_directory):
-            return []  # Return empty list if directory creation fails
+        # if not self._validate_directory(affliction_directory):
+        #     return []  # Return empty list if directory creation fails
+        # 
+        # # Use default file if guild-specific file doesn't exist
+        # if not os.path.exists(affliction_path):
+        #     self.console.print(f"[yellow]Warning: {affliction_path} not found. Using default afflictions.")
+        #     self.logger.log(f"{affliction_path} not found. Using default afflictions.", "Json")
+        #     affliction_path = "afflictions.default.json"
+        # 
+        #     # If even default file doesn't exist, create an empty file
+        #     if not os.path.exists(affliction_path):
+        #         self.console.print(f"[yellow]Warning: Default affliction file not found. Creating empty file")
+        #         self.logger.log(f"Default affliction file not found. Creating empty file", "Json")
+        #         try:
+        #             with open(affliction_path, 'w') as f:
+        #                 json.dump([], f)
+        #         except Exception as e:
+        #             self.console.print(f"[red bold]Error creating default affliction file: {e}")
+        #             self.logger.log(f"Error creating default affliction file: {e}", "Json")
+        #             return []  # Return empty list if file creation fails
 
-        # Use default file if guild-specific file doesn't exist
-        if not os.path.exists(affliction_path):
-            self.console.print(f"[yellow]Warning: {affliction_path} not found. Using default afflictions.")
-            self.logger.log(f"{affliction_path} not found. Using default afflictions.", "Json")
-            affliction_path = "afflictions.default.json"
-
-            # If even default file doesn't exist, create an empty file
-            if not os.path.exists(affliction_path):
-                self.console.print(f"[yellow]Warning: Default affliction file not found. Creating empty file")
-                self.logger.log(f"Default affliction file not found. Creating empty file", "Json")
-                try:
-                    with open(affliction_path, 'w') as f:
-                        json.dump([], f)
-                except Exception as e:
-                    self.console.print(f"[red bold]Error creating default affliction file: {e}")
-                    self.logger.log(f"Error creating default affliction file: {e}", "Json")
-                    return []  # Return empty list if file creation fails
-
+        if not self._validate_json_load(affliction_directory, affliction_path, "afflictions.default.json"):
+            return []
         try:
             with open(affliction_path, 'r') as f:
                 raw_data = json.load(f)
@@ -333,6 +219,15 @@ class AfflictionBot:
             self.console.print(f"[red bold]Error: {config_path} not found")
             self.logger.log(f"Error: {config_path} not found", "Json")
             return GuildConfig("Parasaurolophus")  # Return default species if file not found
+
+    def _load_json_outcomes(self, guild_id: int) -> List[HuntOutcome]:
+        """
+        Load hunt outcomes from a JSON file.
+        
+        :return: 
+            A list of HuntOutcome objects
+        """
+        # TODO: Finsh this function
 
     def _save_json(self, guild_id: int, directory_name: str, data: any, cls: JSONEncoder | None = None) -> None:
         directory, path = get_paths(directory_name, guild_id)
@@ -842,6 +737,28 @@ class AfflictionBot:
                 self.console.print(f"[red bold]Error creating directory: {e}")
                 self.logger.log(f"Error creating directory: {e}", "Json")
                 return False  # Return if directory creation fails
+        return True
+
+    def _validate_json_load(self, directory: str, path: str, default_path: str) -> bool:
+        if not self._validate_directory(directory):
+            return False
+
+        if not os.path.exists(path):
+            self.console.print(f"[yellow]Warning: {path} not found. Using default values.")
+            self.logger.log(f"{path} not found. Using default values.", "Json")
+            path = default_path
+
+            if not os.path.exists(path):
+                self.console.print(f"[yellow]Warning: Default file not found. Creating empty file")
+                self.logger.log(f"Default file not found. Creating empty file", "Json")
+                try:
+                    with open(path, 'w') as f:
+                        json.dump([], f)
+                except Exception as e:
+                    self.console.print(f"[red bold]Error creating default file: {e}")
+                    self.logger.log(f"Error creating default file: {e}", "Json")
+                    return False
+
         return True
 
     def _write_token_file(self, token: str):
