@@ -308,7 +308,7 @@ class AfflictionBot:
         """Register all Discord slash commands."""
 
         
-        """  Affliction Commands  """
+        # region [collapsed] Affliction Commands
         @self.tree.command(name="roll-affliction", description="Rolls for standard afflictions affecting your dinosaur")
         @app_commands.describe(dino="Your dinosaur's name")
         @app_commands.checks.cooldown(1, 60, key=lambda i: i.user.id)  # Uncomment to enable cooldown
@@ -419,8 +419,9 @@ class AfflictionBot:
                 self.logger.log(f"Error in list_afflictions: {e}", "Bot")
                 await interaction.response.send_message("An error occurred while listing afflictions", ephemeral=True)
 
+        # endregion
 
-        """  Berry Commands  """
+        # region [collapsed] Berry Commands
         berries_group = app_commands.Group(name="berries", description="Berry commands")
         
         @berries_group.command(name="hunt", description="Hunt for some berries")
@@ -430,9 +431,12 @@ class AfflictionBot:
         @berries_group.command(name="balance", description="Tells you how many berries you have")
         async def balance(interaction: discord.Interaction):
             pass
+        
+        # endregion
 
-        """  Admin stuff   """
-        # Commands for admins
+        # region [collapsed] Admin Commands
+        
+        ## Affliction Admin Commands
         @self.tree.command(
             name="add-affliction",
             description="Adds an affliction to the list")
@@ -591,7 +595,9 @@ class AfflictionBot:
                 await interaction.response.send_message("An error occurred while setting the guild configuration",
                                                         ephemeral=True)
 
-        """ Error Handling """
+        # endregion
+        
+        # region [collapsed] Error Handling
         @roll_affliction.error
         async def roll_affliction_error(interaction: discord.Interaction, error: app_commands.AppCommandError):
             await read_error([interaction], error, self.logger)
@@ -615,6 +621,8 @@ class AfflictionBot:
         @set_configs.error
         async def set_configs_error(interaction: discord.Interaction, error: app_commands.AppCommandError):
             await read_error([interaction], error, self.logger)
+            
+        #endregion
 
     def _register_events(self):
         """Register Discord client events."""
