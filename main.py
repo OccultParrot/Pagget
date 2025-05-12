@@ -307,7 +307,8 @@ class AfflictionBot:
     def _register_commands(self):
         """Register all Discord slash commands."""
 
-        # Commands for everyone
+        
+        """  Affliction Commands  """
         @self.tree.command(name="roll-affliction", description="Rolls for standard afflictions affecting your dinosaur")
         @app_commands.describe(dino="Your dinosaur's name")
         @app_commands.checks.cooldown(1, 60, key=lambda i: i.user.id)  # Uncomment to enable cooldown
@@ -418,6 +419,19 @@ class AfflictionBot:
                 self.logger.log(f"Error in list_afflictions: {e}", "Bot")
                 await interaction.response.send_message("An error occurred while listing afflictions", ephemeral=True)
 
+
+        """  Berry Commands  """
+        berries_group = app_commands.Group(name="berries", description="Berry commands")
+        
+        @berries_group.command(name="hunt", description="Hunt for some berries")
+        async def hunt(interaction: discord.Interaction):
+            pass
+        
+        @berries_group.command(name="balance", description="Tells you how many berries you have")
+        async def balance(interaction: discord.Interaction):
+            pass
+
+        """  Admin stuff   """
         # Commands for admins
         @self.tree.command(
             name="add-affliction",
@@ -577,7 +591,7 @@ class AfflictionBot:
                 await interaction.response.send_message("An error occurred while setting the guild configuration",
                                                         ephemeral=True)
 
-        # Error handlers for slash commands
+        """ Error Handling """
         @roll_affliction.error
         async def roll_affliction_error(interaction: discord.Interaction, error: app_commands.AppCommandError):
             await read_error([interaction], error, self.logger)
