@@ -1,3 +1,20 @@
+"""
+TODO:
+- Write /berry hunt
+- Write /berry balance
+- Save and load guild member balances, maybe just save user configs so the currency can be used across servers?
+- Save and load guild hunt outcomes.
+Example:
+{
+    "title": "Empty Bush",
+    "value": "10",
+    "description": "All you can find is a bare bush with a few berries on it."
+}
+- Write /berry steal.
+
+after all that is done, THEN we write the gambling part
+"""
+
 import os
 import sys
 import json
@@ -147,30 +164,27 @@ def get_affliction_embed(affliction: Affliction) -> discord.Embed:
         color=get_rarity_color(affliction.rarity)
     )
 
+
 def validate_discord_token(token: str) -> bool:
     """ Validates a given Discord token """
     if not token:
         return False
-    
+
     url = "https://discord.com/api/v10/users/@me"
     headers = {"Authorization": f"Bot {token}"}
-    
+
     try:
         response = requests.get(url, headers=headers)
         if response.status_code != 200:
             return False
-        
+
         data = response.json()
         print(f"Token is valid! Bot name: {data.get('username')}")
         return True
     except Exception as e:
         print("Error validating token:", e)
         return False
-        
-        
-        
-    
-    
+
 
 class AfflictionBot:
     """Main bot class to handle Discord interactions and affliction management."""
@@ -307,7 +321,6 @@ class AfflictionBot:
     def _register_commands(self):
         """Register all Discord slash commands."""
 
-        
         # region [collapsed] Affliction Commands
         @self.tree.command(name="roll-affliction", description="Rolls for standard afflictions affecting your dinosaur")
         @app_commands.describe(dino="Your dinosaur's name")
@@ -423,19 +436,19 @@ class AfflictionBot:
 
         # region [collapsed] Berry Commands
         berries_group = app_commands.Group(name="berries", description="Berry commands")
-        
+
         @berries_group.command(name="hunt", description="Hunt for some berries")
         async def hunt(interaction: discord.Interaction):
             pass
-        
+
         @berries_group.command(name="balance", description="Tells you how many berries you have")
         async def balance(interaction: discord.Interaction):
             pass
-        
+
         # endregion
 
         # region [collapsed] Admin Commands
-        
+
         ## Affliction Admin Commands
         @self.tree.command(
             name="add-affliction",
@@ -596,7 +609,7 @@ class AfflictionBot:
                                                         ephemeral=True)
 
         # endregion
-        
+
         # region [collapsed] Error Handling
         @roll_affliction.error
         async def roll_affliction_error(interaction: discord.Interaction, error: app_commands.AppCommandError):
@@ -621,8 +634,8 @@ class AfflictionBot:
         @set_configs.error
         async def set_configs_error(interaction: discord.Interaction, error: app_commands.AppCommandError):
             await read_error([interaction], error, self.logger)
-            
-        #endregion
+
+        # endregion
 
     def _register_events(self):
         """Register Discord client events."""
@@ -799,12 +812,12 @@ class AfflictionBot:
                 self.logger.log(f"Error creating directory: {e}", "Json")
                 return False  # Return if directory creation fails
         return True
-    
+
     def _write_token_file(self, token: str):
-        
+
         if not self._validate_directory("data/"):
             return
-        
+
         try:
             with open("data/bot_token.txt", "w") as f:
                 f.write(token)
@@ -848,10 +861,12 @@ class AfflictionBot:
             with open("data/bot_token.txt", "r") as f:
                 token = f.read().strip()
                 if not validate_discord_token(token):
-                    self.console.print("[red]Token file holds invalid Discord token, checking args. If args do not contain '--token=' then collecting manual input.[/]")
+                    self.console.print(
+                        "[red]Token file holds invalid Discord token, checking args. If args do not contain '--token=' then collecting manual input.[/]")
                     token = None
         except FileNotFoundError:
-            self.console.print("[yellow]Token file not found, checking args. If args do not contain '--token=' then collecting manual input.[/]")
+            self.console.print(
+                "[yellow]Token file not found, checking args. If args do not contain '--token=' then collecting manual input.[/]")
 
         for arg in sys.argv:
             if arg == "--debug":
@@ -860,12 +875,12 @@ class AfflictionBot:
                 self.client.debug = True
             elif arg.startswith("--token="):
                 token = arg.split("=")[1]
-                
+
                 if not validate_discord_token(token):
                     token = None
                     self.console.print("[red]Invalid token. Please enter your token.[/]")
                     break
-                    
+
                 self._write_token_file(token)
                 break
 
@@ -876,7 +891,7 @@ class AfflictionBot:
                     self.console.print("[red]Error: No token provided")
                     self.logger.log("No token provided", "Bot")
                     continue
-                    
+
                 if validate_discord_token(token):
                     self._write_token_file(token)
                     break
