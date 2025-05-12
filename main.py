@@ -1,9 +1,7 @@
 """
 TODO:
-- Write /berry hunt
-- Write /berry balance
-- Save and load guild member balances, maybe just save user configs so the currency can be used across servers?
 - Write /berry steal.
+- Write all the hunting outcomes
 
 after all that is done, THEN we write the gambling part
 """
@@ -293,7 +291,7 @@ class AfflictionBot:
     def _register_commands(self):
         """Register all Discord slash commands."""
 
-        # region [collapsed] Affliction Commands
+        # region Affliction Commands
         @self.tree.command(name="roll-affliction", description="Rolls for standard afflictions affecting your dinosaur")
         @app_commands.describe(dino="Your dinosaur's name")
         @app_commands.checks.cooldown(1, 60, key=lambda i: i.user.id)  # Uncomment to enable cooldown
@@ -407,7 +405,7 @@ class AfflictionBot:
 
         # endregion
 
-        # region [collapsed] Admin Commands
+        # region Admin Commands
 
         ## Affliction Admin Commands
         @self.tree.command(
@@ -574,7 +572,7 @@ class AfflictionBot:
 
         # endregion
 
-        # region [collapsed] Error Handling
+        # region Error Handling
         @roll_affliction.error
         async def roll_affliction_error(interaction: discord.Interaction, error: app_commands.AppCommandError):
             await read_error([interaction], error, self.logger)
@@ -631,6 +629,12 @@ class AfflictionBot:
             )
 
             await interaction.response.send_message(embed=embed, ephemeral=False)
+            
+        gambling_group = app_commands.Group(name="gambling", description="Gambling commands")
+        
+        # TODO: Add gambling commands
+        
+        berries_group.add_command(gambling_group)
 
         # Add the group to the command tree
         self.tree.add_command(berries_group)
