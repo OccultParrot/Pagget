@@ -1,7 +1,7 @@
 import json
 
 
-class HuntOutcome:
+class GatherOutcome:
     """Class representing a hunt outcome with title, value, and description."""
 
     def __init__(self, value: int, description: str, rarity: str):
@@ -19,9 +19,9 @@ class HuntOutcome:
         )
 
 
-class HuntOutcomeEncoder(json.JSONEncoder):
+class GatherOutcomeEncoder(json.JSONEncoder):
     def default(self, obj):
-        if isinstance(obj, HuntOutcome):
+        if isinstance(obj, GatherOutcome):
             return {
                 "value": obj.value,
                 "description": obj.description,
