@@ -13,7 +13,7 @@ import random
 import math
 import requests
 from json import JSONEncoder
-from typing import List, Optional
+from typing import List, Optional, Literal
 import atexit
 
 import discord
@@ -24,7 +24,8 @@ from rich.console import Console
 
 from logger import Logger
 from permissions import has_admin_check
-from typepairs import Affliction, AfflictionEncoder, GuildConfig, GuildConfigEncoder, HuntOutcome, HuntOutcomeEncoder
+from typepairs import Affliction, AfflictionEncoder, GuildConfig, GuildConfigEncoder, GatherOutcome, \
+    GatherOutcomeEncoder
 
 # Constants
 DATA_DIRECTORY = "data"
@@ -62,6 +63,15 @@ def get_rarity_color(rarity: str) -> discord.Color:
         return discord.Color.default()
 
 
+def get_outcome_color(value: int) -> discord.Color:
+    if value < 0:
+        return discord.Color.red()
+    elif value == 0:
+        return discord.Color.greyple()
+    else:
+        return discord.Color.green()
+
+
 def get_affliction_embed(affliction: Affliction) -> discord.Embed:
     """Create a Discord embed for an affliction."""
     return discord.Embed(
@@ -71,13 +81,13 @@ def get_affliction_embed(affliction: Affliction) -> discord.Embed:
     )
 
 
-def get_outcome_embed(outcome: HuntOutcome, old_balance: int, new_balance: int,
+def get_outcome_embed(outcome: GatherOutcome, old_balance: int, new_balance: int,
                       interaction: discord.Interaction) -> discord.Embed:
     """Create a Discord embed for a hunt outcome."""
     embed = discord.Embed(
         title="Successful Hunt!" if outcome.value > 0 else "Failed Hunt!",
-        description=f"{outcome.description} {'and got' if outcome.value > 0 else 'and lost'} *{abs(outcome.value)}* berries{'!' if outcome.value > 0 else '.'}",
-        color=get_rarity_color(outcome.rarity)
+        description=outcome.description,
+        color=get_outcome_color(outcome.value)
     )
     embed.set_author(name=interaction.user.display_name, icon_url=interaction.user.avatar.url)
 
@@ -112,7 +122,8 @@ class AfflictionBot:
 
     afflictions_dict: dict[int, List[Affliction]]
     guild_configs: dict[int, GuildConfig]
-    hunt_outcomes_dict: dict[int, List[HuntOutcome]]
+    hunt_outcomes_dict: dict[int, List[GatherOutcome]]
+    steal_outcomes_dict: dict[int, List[GatherOutcome]]
     balances_dict: dict[int, int]
 
     def __init__(self):
@@ -210,7 +221,7 @@ class AfflictionBot:
             self.logger.log(f"Error: {config_path} not found", "Json")
             return GuildConfig("Parasaurolophus")  # Return default species if file not found
 
-    def _load_json_outcomes(self, guild_id: int) -> List[HuntOutcome]:
+    def _load_json_hunt_outcomes(self, guild_id: int) -> List[GatherOutcome]:
         """
         Load hunt outcomes from a JSON file.
         
@@ -224,17 +235,54 @@ class AfflictionBot:
             return []
 
         try:
-            with open(outcome_path, 'r') as f:
+            with open(outcome_path, 'r', encoding="utf-8") as f:
                 raw_data = json.load(f)
 
-                outcomes: List[HuntOutcome] = []
+                outcomes: List[GatherOutcome] = []
                 for item in raw_data:
-                    if not all(key in item for key in ["title", "value", "description"]):
+                    if not all(key in item for key in ["rarity", "value", "description"]):
                         self.console.print(f"[yellow]Warning: Skipping invalid outcome entry: {item}")
                         self.logger.log(f"Skipping invalid outcome entry: {item}", "Json")
                         continue
 
-                    outcome: HuntOutcome = HuntOutcome.from_dict(item)
+                    outcome: GatherOutcome = GatherOutcome.from_dict(item)
+                    outcomes.append(outcome)
+
+                self.console.print(f"[green]Loaded {len(outcomes)} outcomes from {outcome_path}")
+                return outcomes
+
+        except FileNotFoundError:
+            self.console.print(f"[red bold]Error: {outcome_path} not found")
+            self.logger.log(f"Error: {outcome_path} not found", "Json")
+            return []  # Return empty list if file not found
+
+    def _load_json_steal_outcomes(self, guild_id: int) -> List[GatherOutcome]:
+        def _load_json_hunt_outcomes(self, guild_id: int) -> List[GatherOutcome]:
+            """
+            Load hunt outcomes from a JSON file.
+            
+            :return: 
+                A list of HuntOutcome objects
+            """
+
+        outcome_directory, outcome_path = get_paths("steal_outcomes", guild_id)
+        outcome_path, valid = self._validate_json_load(outcome_directory, outcome_path,
+                                                       "defaults/steal_outcomes.default.json")
+        if not valid:
+            return []
+
+        try:
+            with open(outcome_path, 'r', encoding="utf-8") as f:
+                raw_data = json.load(f)
+
+                outcomes: List[GatherOutcome] = []
+                for item in raw_data:
+                    if not all(key in item for key in ["rarity", "value", "description"]):
+                        self.console.print(f"[yellow]Warning: Skipping invalid outcome entry: {item}")
+                        self.logger.log(f"Skipping invalid outcome entry: {item}", "Json")
+                        continue
+
+                    outcome: GatherOutcome = GatherOutcome.from_dict(item)
                     outcomes.append(outcome)
 
                 self.console.print(f"[green]Loaded {len(outcomes)} outcomes from {outcome_path}")
@@ -599,23 +647,31 @@ class AfflictionBot:
 
         # endregion
 
-        self._register_berry_commands()
+        # Add the berry commands to the command tree
+        self.tree.add_command(self._register_berry_commands())
 
-    def _register_berry_commands(self):
+    def _register_berry_commands(self) -> app_commands.Group:
         """Register berry-related commands as a command group."""
 
         # Create the berries group and add it to the command tree
         berries_group = app_commands.Group(name="berries", description="Berry commands")
 
-        @berries_group.command(name="hunt", description="Hunt for some berries")
-        async def hunt(interaction: discord.Interaction):
+        async def gather(interaction: discord.Interaction, type: str):
             old_balance = self._validate_user(interaction.user.id, interaction.guild_id)
-            outcome: HuntOutcome = self._roll_for_hunting_occurrence(interaction.guild_id)
+            outcome: GatherOutcome = self._roll_for_gathering_occurrence(interaction.guild_id, type)
             self.balances_dict[interaction.user.id] += outcome.value
 
             await interaction.response.send_message(
                 embed=get_outcome_embed(outcome, old_balance, self.balances_dict[interaction.user.id], interaction),
                 ephemeral=False)
+
+        @berries_group.command(name="hunt", description="Hunt for some berries")
+        async def hunt(interaction: discord.Interaction):
+            await gather(interaction, "hunt")
+
+        @berries_group.command(name="steal", description="Steal berries from another parasaur")
+        async def steal(interaction: discord.Interaction):
+            await gather(interaction, "steal")
 
         @berries_group.command(name="balance", description="Check your berry balance")
         async def balance(interaction: discord.Interaction):
@@ -629,15 +685,47 @@ class AfflictionBot:
             )
 
             await interaction.response.send_message(embed=embed, ephemeral=False)
-            
-        gambling_group = app_commands.Group(name="gambling", description="Gambling commands")
-        
-        # TODO: Add gambling commands
-        
-        berries_group.add_command(gambling_group)
 
-        # Add the group to the command tree
-        self.tree.add_command(berries_group)
+        # Add gambling commands to the berries group
+        berries_group.add_command(self._register_gambling_commands())
+
+        return berries_group
+
+    def _register_gambling_commands(self) -> app_commands.Group:
+        gambling_group = app_commands.Group(name="gambling", description="Gambling commands")
+
+        # TODO: Add gambling commands
+        @gambling_group.command(name="roulette", description="Play roulette with your berries")
+        @app_commands.describe(bet="Amount of berries to bet")
+        # @app_commands.checks.cooldown(1, 60, key=lambda i: i.user.id)  # Uncomment to enable cooldown
+        async def roulette(interaction: discord.Interaction, bet: int):
+            if 0 > bet > self._validate_user(interaction.user.id, interaction.guild_id):
+                await interaction.response.send_message("You don't have enough berries to bet that much.",
+                                                        ephemeral=True)
+                return
+            pass
+
+        @gambling_group.command(name="slots", description="Play slots with your berries")
+        @app_commands.describe(bet="Amount of berries to bet")
+        # @app_commands.checks.cooldown(1, 60, key=lambda i: i.user.id)  # Uncomment to enable cooldown
+        async def slots(interaction: discord.Interaction, bet: int):
+            if 0 > bet > self._validate_user(interaction.user.id, interaction.guild_id):
+                await interaction.response.send_message("You don't have enough berries to bet that much.",
+                                                        ephemeral=True)
+                return
+            pass
+
+        @gambling_group.command(name="blackjack", description="Play blackjack with your berries")
+        @app_commands.describe(bet="Amount of berries to bet")
+        # @app_commands.checks.cooldown(1, 60, key=lambda i: i.user.id)  # Uncomment to enable cooldown
+        async def blackjack(interaction: discord.Interaction, bet: int):
+            if 0 > bet > self._validate_user(interaction.user.id, interaction.guild_id):
+                await interaction.response.send_message("You don't have enough berries to bet that much.",
+                                                        ephemeral=True)
+                return
+            pass
+
+        return gambling_group
 
     def _register_events(self):
         """Register Discord client events."""
@@ -645,10 +733,9 @@ class AfflictionBot:
         @self.client.event
         async def on_ready():
             self.console.clear()
-            self.console.rule(f"{self.client.user.name}")
+            self.console.rule(f"[bold]{self.client.user.name}[/]")  # Added bold for emphasis
 
             self.console.print(f"Bot activated as {self.client.user}")
-
             self.logger.log(f"{self.client.user.name} has logged in as {self.client.user}", "Bot")
 
             self.console.print("\nConnected Guilds:")
@@ -663,92 +750,166 @@ class AfflictionBot:
             self.console.print("\n[green]Loading afflictions...[/]")
             self.logger.log("Loading afflictions...", "Bot")
             self.afflictions_dict = {guild.id: self._load_json_afflictions(guild.id) for guild in self.client.guilds}
-            self.console.print(f"[green]Loaded[/] {len(self.afflictions_dict)} [green]guild(s) with afflictions")
+            self.console.print(
+                f"[green]Loaded[/] {len(self.afflictions_dict)} [green]guild(s) with afflictions[/]")  # Added closing [/]
 
             # Load hunt outcomes for each guild
             self.console.print("\n[green]Loading hunt outcomes...[/]")
             self.logger.log("Loading hunt outcomes...", "Bot")
-            self.hunt_outcomes_dict = {guild.id: self._load_json_outcomes(guild.id) for guild in self.client.guilds}
-            self.console.print(f"[green]Loaded[/] {len(self.hunt_outcomes_dict)} [green]guild(s) with hunt outcomes")
+            self.hunt_outcomes_dict = {guild.id: self._load_json_hunt_outcomes(guild.id) for guild in
+                                       self.client.guilds}
+            self.console.print(
+                f"[green]Loaded[/] {len(self.hunt_outcomes_dict)} [green]guild(s) with hunt outcomes[/]")  # Added closing [/]
+
+            # Load steal outcomes for each guild
+            self.console.print("\n[green]Loading steal outcomes...[/]")
+            self.logger.log("Loading steal outcomes...", "Bot")
+            self.steal_outcomes_dict = {guild.id: self._load_json_steal_outcomes(guild.id) for guild in
+                                        self.client.guilds}
+            self.console.print(
+                f"[green]Loaded[/] {len(self.steal_outcomes_dict)} [green]guild(s) with steal outcomes[/]")  # Added closing [/]
 
             # Load balances of each user
             self.console.print("\n[green]Loading user balances...[/]")
             self.logger.log("Loading user balances...", "Bot")
             self.balances_dict = self._load_json_balances()
-            self.console.print(f"[green]Loaded[/] {len(self.balances_dict)} [green]user balances")
-            self.console.print("[green]User balances loaded[/]")
+            # Consider logging count after loading if successful
+            self.console.print(f"[green]Loaded[/] {len(self.balances_dict)} [green]user balances[/]")
+            # This second print might be redundant if the previous line shows the count
+            # self.console.print("[green]User balances loaded[/]") 
 
             # Load guild configurations
             self.console.print("\n[green]Loading guild configurations...[/]")
             self.logger.log("Loading guild configurations...", "Bot")
             self.guild_configs = {guild.id: self._load_json_configs(guild.id) for guild in self.client.guilds}
-            self.console.print(f"[green]Loaded[/] {len(self.guild_configs)} [green]guild(s) with configurations")
-            self.console.print("[green]Guild configurations loaded[/]")
+            self.console.print(f"[green]Loaded[/] {len(self.guild_configs)} [green]guild(s) with configurations[/]")
+            # This second print might be redundant
+            # self.console.print("[green]Guild configurations loaded[/]")
 
             # If syncing is enabled, sync the command tree
+            # NOTE: Using 'bot.tree' in the guild sync section, ensure 'bot' is defined or use 'self.tree' consistently
             if any(arg == "--sync" for arg in sys.argv):
-                self.console.print("\n[green]Syncing command tree...[/]")
-                self.logger.log("Syncing command tree...", "Bot")
+                self.console.print("\n[green]Syncing command tree globally...[/]")
+                self.logger.log("Syncing command tree globally...", "Bot")
                 self.console.print("[yellow]Warning: Avoid syncing commands too often to avoid rate limits...[/]")
                 self.console.print("[yellow]Warning: Syncing commands may take a while...[/]")
-                await self.tree.sync()
-                self.console.print("[green]Command tree synced[/]")
-                self.logger.log("Command tree synced", "Bot")
+                try:
+                    await self.tree.sync()
+                    self.console.print("[green]Command tree synced globally[/]")
+                    self.logger.log("Command tree synced globally", "Bot")
+                except Exception as e:
+                    self.console.print(f"[red]Error syncing command tree globally: {e}[/]")
+                    self.logger.log(f"Error syncing command tree globally: {e}", "BotError")
+
 
             elif any(arg == "--sync-guild" for arg in sys.argv):
                 self.console.print("\nPlease select a guild to sync the command tree with:")
-                for i, guild in enumerate(self.client.guilds):
-                    self.console.print(f"  • [green]{i + 1}[/] {guild.name} ({guild.id})")
-
-                guild_index = int(input("Enter the number of the guild to sync with: ")) - 1
-                if 0 <= guild_index < len(self.client.guilds):
-                    guild = self.client.guilds[guild_index]
-                    self.console.print(f"Syncing command tree with {guild.name} ({guild.id})...")
-                    bot.tree.clear_commands(guild=guild)
-                    self.tree.copy_global_to(guild=guild)
-                    await self.tree.sync(guild=guild)
-                    self.console.print(f"Command tree synced with {guild.name} ({guild.id})")
+                if not self.client.guilds:
+                    self.console.print("[yellow]Bot is not in any guilds to sync with.[/]")
+                    self.logger.log("Sync-guild attempted but bot is not in any guilds.", "Bot")
                 else:
-                    self.console.print("[red]Invalid guild number. Syncing aborted.[/]")
-                    self.logger.log("Invalid guild number. Syncing aborted.", "Bot")
+                    for i, guild in enumerate(self.client.guilds):
+                        self.console.print(
+                            f"  • [cyan]{i + 1}[/] {guild.name} ({guild.id})")  # Changed color for number
 
-            # List all registered commands
+                    try:
+                        guild_choice = input("Enter the number of the guild to sync with (or 0 to cancel): ")
+                        guild_index = int(guild_choice) - 1
+                        if guild_choice == '0':
+                            self.console.print("[yellow]Syncing cancelled.[/]")
+                            self.logger.log("Guild sync cancelled by user.", "Bot")
+                        elif 0 <= guild_index < len(self.client.guilds):
+                            guild = self.client.guilds[guild_index]
+                            self.console.print(f"\n[green]Syncing command tree with {guild.name} ({guild.id})...[/]")
+                            self.logger.log(f"Syncing command tree with guild: {guild.name} ({guild.id})", "Bot")
+                            self.console.print(
+                                "[yellow]Clearing existing commands in guild and copying global commands...[/]")
+
+                            # Ensure using self.tree consistently
+                            self.tree.clear_commands(guild=guild)
+                            self.tree.copy_global_to(guild=guild)
+                            await self.tree.sync(guild=guild)
+
+                            self.console.print(f"[green]Command tree synced with {guild.name} ({guild.id})[/]")
+                            self.logger.log(f"Command tree synced with guild: {guild.name} ({guild.id})", "Bot")
+                        else:
+                            self.console.print("[red]Invalid guild number. Syncing aborted.[/]")
+                            self.logger.log("Invalid guild number provided for sync. Syncing aborted.", "Bot")
+                    except ValueError:
+                        self.console.print("[red]Invalid input. Please enter a number. Syncing aborted.[/]")
+                        self.logger.log("Non-numeric input for guild sync selection. Syncing aborted.", "Bot")
+                    except Exception as e:
+                        self.console.print(f"[red]Error syncing command tree with guild: {e}[/]")
+                        self.logger.log(f"Error syncing command tree with guild: {e}", "BotError")
+
+            # ================================================================
+            # List all registered commands (using recursive approach)
+            # ================================================================
             self.console.print("\n[bold underline]Registered Commands:[/]")
             self.logger.log("Registered Commands:", "Bot")
 
-            # Separate groups and standalone commands
+            # Separate top-level groups and standalone commands
             groups = {}
             standalone_commands = []
 
+            # Initial categorization of top-level commands
             for command in self.tree.get_commands():
                 if isinstance(command, app_commands.Group):
                     groups[command.name] = command
                 else:
                     standalone_commands.append(command)
 
-            # Print command groups
+            # Print command groups (top-level)
             if groups:
                 self.console.print("\n[green bold]Command Groups:[/]")
-                for group_name, group in sorted(groups.items()):
-                    admin_status = "[purple]ADMIN[/]" if has_admin_check(group) else "[green]USER[/]"
-                    self.console.print(f"  [bold]/{group_name}[/] {admin_status} - {group.description}")
-                    self.logger.log(f"  Group: {group_name} - {group.description}", "Bot")
+                for group_name, group in sorted(groups.items()):  # Sort top-level groups
+                    try:
+                        # Assuming has_admin_check is defined elsewhere and accessible
+                        is_admin_group = has_admin_check(group)
+                    except NameError:
+                        self.logger.log(
+                            f"Warning: has_admin_check function not found for group '{group_name}'. Assuming USER.",
+                            "Bot")
+                        is_admin_group = False
 
-                    # Print subcommands within the group
-                    for subcommand in group.commands:
-                        subcommand_admin = "[purple]ADMIN[/]" if has_admin_check(subcommand) else "[green]USER[/]"
-                        self.console.print(
-                            f"    • [bold]{subcommand.name}[/] {subcommand_admin} - {subcommand.description}")
-                        self.logger.log(f"    Subcommand: {group_name} {subcommand.name} - {subcommand.description}",
-                                        "Bot")
+                    admin_status_group = "[purple]ADMIN[/]" if is_admin_group else "[green]USER[/]"
+                    self.console.print(f"  [bold]/{group.name}[/] {admin_status_group} - {group.description}")
+                    self.logger.log(f"  Group: /{group.name} {admin_status_group} - {group.description}",
+                                    "Bot")  # Added status to log
 
-            # Print standalone commands
+                    # === Key: Initial call to the recursive function for sub-items ===
+                    # Sets the initial indentation and path for items under this top-level group.
+                    initial_sub_item_indent = "    "
+                    sorted_sub_items = sorted(group.commands, key=lambda c: c.name)  # Sort sub-items
+                    for sub_item in sorted_sub_items:
+                        # Pass the group's name as the initial part of the path
+                        self._print_command_item_recursive(sub_item, initial_sub_item_indent, [group.name])
+
+            # Print standalone commands (top-level)
             if standalone_commands:
                 self.console.print("\n[green bold]Standalone Commands:[/]")
-                for command in sorted(standalone_commands, key=lambda x: x.name):
-                    admin_status = "[purple]ADMIN[/]" if has_admin_check(command) else "[green]USER[/]"
-                    self.console.print(f"  [bold]/{command.name}[/] {admin_status} - {command.description}")
-                    self.logger.log(f"  Command: {command.name} - {command.description}", "Bot")
+                for command in sorted(standalone_commands, key=lambda x: x.name):  # Sort standalone commands
+                    try:
+                        # Assuming has_admin_check is defined elsewhere and accessible
+                        is_admin_cmd = has_admin_check(command)
+                    except NameError:
+                        self.logger.log(
+                            f"Warning: has_admin_check function not found for command '{command.name}'. Assuming USER.",
+                            "Bot")
+                        is_admin_cmd = False
+
+                    admin_status_cmd = "[purple]ADMIN[/]" if is_admin_cmd else "[green]USER[/]"
+                    self.console.print(f"  [bold]/{command.name}[/] {admin_status_cmd} - {command.description}")
+                    self.logger.log(f"  Command: /{command.name} {admin_status_cmd} - {command.description}",
+                                    "Bot")  # Added status to log
+
+            if not groups and not standalone_commands:
+                self.console.print("  [yellow]No application commands found or registered.[/]")
+                self.logger.log("No application commands found or registered.", "Bot")
+
+            # Final ready message
+            self.console.print("\n[bold green]Bot is ready and online![/]")
+            self.logger.log("Bot is ready and online!", "Bot")
 
         @self.client.event
         async def on_message(message: discord.Message):
@@ -756,6 +917,54 @@ class AfflictionBot:
                 return
                 # Handle messages here if needed
             pass  # TODO: Remove pass when implementing message handling
+
+    # --- Add this method to your class ---
+    def _print_command_item_recursive(self, command_item, base_indent_str, parent_group_path_parts_for_log):
+        """
+        Recursively prints a command item (command or group) and its children if it's a group.
+        This is the core logic for handling nested groups.
+        """
+        prefix = "• "
+
+        # Construct the full command path for logging (e.g., "settings user profile")
+        current_full_path_parts = parent_group_path_parts_for_log + [command_item.name]
+        log_full_path = " ".join(current_full_path_parts)
+
+        # Determine if the command requires admin privileges (ensure has_admin_check is accessible)
+        try:
+            # Assuming has_admin_check is defined elsewhere and accessible
+            is_admin = has_admin_check(command_item)
+        except NameError:
+            # Fallback or default if has_admin_check is not found - adjust as needed
+            self.logger.log(
+                f"Warning: has_admin_check function not found for command '{log_full_path}'. Assuming USER.", "Bot")
+            is_admin = False
+
+        admin_status = "[purple]ADMIN[/]" if is_admin else "[green]USER[/]"
+        description = getattr(command_item, 'description', 'No description available')
+
+        # Console output: Display only the current command/group name, nested visually
+        self.console.print(
+            f"{base_indent_str}{prefix}[bold]{command_item.name}[/] {admin_status} - {description}"
+        )
+
+        # Logger output: Log with the full path for clarity
+        item_type_for_log = "Sub-Group" if isinstance(command_item, app_commands.Group) else "Subcommand"
+        self.logger.log(
+            f"{base_indent_str}{prefix}{item_type_for_log}: /{log_full_path} {admin_status} - {description}",
+            "Bot"
+        )
+
+        # If the current item is a group, recurse for its children
+        if isinstance(command_item, app_commands.Group):
+            # Increase indentation for the next level of nesting
+            child_base_indent_str = base_indent_str + "  "
+
+            # Sort sub-items by name for consistent output at this level
+            sorted_sub_items = sorted(command_item.commands, key=lambda c: c.name)
+            for sub_item in sorted_sub_items:
+                # Recursive call for each sub-item of the current group
+                self._print_command_item_recursive(sub_item, child_base_indent_str, current_full_path_parts)
 
     def _roll_for_afflictions(self, guild_id: int, is_minor: bool = False) -> List[Affliction]:
         """
@@ -840,18 +1049,28 @@ class AfflictionBot:
 
         return None
 
-    def _roll_for_hunting_occurrence(self, guild_id: int) -> HuntOutcome:
+    def _roll_for_gathering_occurrence(self, guild_id: int, type: Literal["hunt", "steal"]) -> GatherOutcome:
         """
         Roll for a hunting occurrence based on the configured chance.
         
         Returns:
             A HuntOutcome object representing the outcome of the hunt
         """
-        commons = [outcome for outcome in self.hunt_outcomes_dict[guild_id] if outcome.rarity.lower() == "common"]
-        uncommons = [outcome for outcome in self.hunt_outcomes_dict[guild_id] if outcome.rarity.lower() == "uncommon"]
-        rares = [outcome for outcome in self.hunt_outcomes_dict[guild_id] if outcome.rarity.lower() == "rare"]
-        ultra_rares = [outcome for outcome in self.hunt_outcomes_dict[guild_id] if
-                       outcome.rarity.lower() == "ultra rare"]
+        # TODO: Make a function do this, return rarity groups and rarity weights
+        if type == "hunt":
+            commons = [outcome for outcome in self.hunt_outcomes_dict[guild_id] if outcome.rarity.lower() == "common"]
+            uncommons = [outcome for outcome in self.hunt_outcomes_dict[guild_id] if
+                         outcome.rarity.lower() == "uncommon"]
+            rares = [outcome for outcome in self.hunt_outcomes_dict[guild_id] if outcome.rarity.lower() == "rare"]
+            ultra_rares = [outcome for outcome in self.hunt_outcomes_dict[guild_id] if
+                           outcome.rarity.lower() == "ultra rare"]
+        else:
+            commons = [outcome for outcome in self.steal_outcomes_dict[guild_id] if outcome.rarity.lower() == "common"]
+            uncommons = [outcome for outcome in self.steal_outcomes_dict[guild_id] if
+                         outcome.rarity.lower() == "uncommon"]
+            rares = [outcome for outcome in self.steal_outcomes_dict[guild_id] if outcome.rarity.lower() == "rare"]
+            ultra_rares = [outcome for outcome in self.steal_outcomes_dict[guild_id] if
+                           outcome.rarity.lower() == "ultra rare"]
 
         rarity_groups = [commons, uncommons, rares, ultra_rares]
         rarity_weights = [60, 25, 10, 5]
@@ -968,7 +1187,7 @@ class AfflictionBot:
             for guild_id in self.hunt_outcomes_dict:
                 self.console.print(f"  • Saving for guild {guild_id}")
                 self.logger.log(f"    Saving hunt outcomes for guild {guild_id}", "Bot")
-                self._save_json(guild_id, "hunt_outcomes", self.hunt_outcomes_dict[guild_id], cls=HuntOutcomeEncoder)
+                self._save_json(guild_id, "hunt_outcomes", self.hunt_outcomes_dict[guild_id], cls=GatherOutcomeEncoder)
 
             self.console.print("[green]Hunt outcomes saved[/]")
             self.logger.log("Hunt outcomes saved", "Bot")
