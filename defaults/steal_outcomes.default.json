@@ -1,0 +1,207 @@
+[
+  {
+    "description": "You try to sneak up to a herdmate’s stash but get caught, and they take 200 berries from your stash!",
+    "value": -200,
+    "rarity": "common"
+  },
+  {
+    "description": "You try to snatch berries, but a herdmate catches you, and in the scuffle, you lose 150 of your own!",
+    "value": -150,
+    "rarity": "common"
+  },
+  {
+    "description": "You sneak around, but you accidentally bump into a rock, alerting a herdmate, and you lose 250 berries in the scramble.",
+    "value": -250,
+    "rarity": "uncommon"
+  },
+  {
+    "description": "You make a move for a herdmate’s stash, but they hear a twig snap and look over just in time to stop you.",
+    "value": 0,
+    "rarity": "common"
+  },
+  {
+    "description": "You try to sneak in for 500 berries, but a branch grabs your crest, causing you to get stuck and spotted!",
+    "value": 0,
+    "rarity": "uncommon"
+  },
+  {
+    "description": "You think you’ve got a quick getaway, but the Parasaurolophus stops, stares right at you, and takes their berries back.",
+    "value": 0,
+    "rarity": "common"
+  },
+  {
+    "description": "You attempt a quick grab but end up tripping, causing you to lose 300 berries while getting away.",
+    "value": -300,
+    "rarity": "rare"
+  },
+  {
+    "description": "You think you’re clever, but you misstep on some dry leaves and give yourself away!",
+    "value": 0,
+    "rarity": "common"
+  },
+  {
+    "description": "You attempt to steal some berries but trip over your own feet, landing face-first in a bush.",
+    "value": 0,
+    "rarity": "common"
+  },
+  {
+    "description": "You sneak up for a quick grab, but you manage to step right into a hole. You get stuck, and while you're stuck in place, the other Parasaurolophus casually snatches 100 berries from your stash.",
+    "value": -100,
+    "rarity": "common"
+  },
+  {
+    "description": "You reach for your friend’s stash, but you accidentally knock over a tree branch that swings back and slaps you in the face.",
+    "value": 0,
+    "rarity": "common"
+  },
+  {
+    "description": "You make your move, but you step into a mud pit and get stuck halfway. While you're stuck in the muck, a friend swipes 250 berries from your stash.",
+    "value": -250,
+    "rarity": "uncommon"
+  },
+  {
+    "description": "You go for the berries, but your herdmate turns around just in time, taking 150 of your berries in the process as you freeze in surprise.",
+    "value": -150,
+    "rarity": "common"
+  },
+  {
+    "description": "You attempt a quick steal, but a herdmate spots you while you stand there frozen in guilt.",
+    "value": 0,
+    "rarity": "common"
+  },
+  {
+    "description": "You quietly slip behind a distracted herdmate, snatching 700 berries from their stash before they even notice.",
+    "value": 700,
+    "rarity": "rare"
+  },
+  {
+    "description": "You trick a herdmate into stampeding, and snatched 500 of her berries!",
+    "value": 500,
+    "rarity": "uncommon"
+  },
+  {
+    "description": "You challenge a herdmate to a race, but while they’re busy sprinting, you grab 500 of their berries and stash them in your pouch.",
+    "value": 500,
+    "rarity": "uncommon"
+  },
+  {
+    "description": "You distracted a herdmate with a loud honk and stole 300 berries!",
+    "value": 300,
+    "rarity": "common"
+  },
+  {
+    "description": "You bumped into someone “accidentally” and took 600 berries!",
+    "value": 600,
+    "rarity": "rare"
+  },
+  {
+    "description": "You made up a “new berry law” and took 500 berries in “taxes”!",
+    "value": 500,
+    "rarity": "uncommon"
+  },
+  {
+    "description": "You ask to “see” a herdmate’s berries, then slyly walk off with 700 of them.",
+    "value": 700,
+    "rarity": "ultra rare"
+  },
+  {
+    "description": "You distract a herdmate by grooming them, and while they’re relaxed, you swipe 400 berries.",
+    "value": 400,
+    "rarity": "common"
+  },
+  {
+    "description": "You pose as a berry inspector and leave with 600 berries after they “pass inspection.”",
+    "value": 600,
+    "rarity": "uncommon"
+  },
+  {
+    "description": "You play dead to fool a herdmate, then spring to life and steal 450 berries!",
+    "value": 450,
+    "rarity": "common"
+  },
+  {
+    "description": "You start a group song, then slyly swipe 400 berries while everyone sings!",
+    "value": 400,
+    "rarity": "common"
+  },
+  {
+    "description": "You flatter a herdmate’s crest, then grab 600 berries while they’re flattered.",
+    "value": 600,
+    "rarity": "uncommon" 
+  },
+  {
+    "description": "You ask to carry a herdmate’s berries, but just run off with 500 of them!",
+    "value": 500,
+    "rarity": "uncommon"
+  },
+  {
+    "description": "You shout “predator!” and while the herd is distracted, you snatch 350 berries from them.",
+    "value": 350,
+    "rarity": "common"
+  },
+  {
+    "description": "You tell a herdmate it’s “for science” and take 650 berries as part of your research.",
+    "value": 650,
+    "rarity": "rare" 
+  },
+  {
+    "description": "You join a nap circle, then wake up to find 500 more berries in your stash.",
+    "value": 500,
+    "rarity": "uncommon"
+  },
+  {
+    "description": "You convince a herdmate to “share” their berries, then walk off with 600 of them.",
+    "value": 600,
+    "rarity": "uncommon" 
+  },
+  {
+    "description": "You ask to “hold” the berries for a friend while they sleep, then keep 700 berries for yourself!",
+    "value": 700,
+    "rarity": "ultra rare" 
+  },
+  {
+    "description": "You trade a herdmate for a “mystical” rock for 600 berries in exchange.",
+    "value": 600,
+    "rarity": "uncommon" 
+  },
+  {
+    "description": "You perform a “berry blessing” and take 600 berries as a “gift.”",
+    "value": 600,
+    "rarity": "uncommon"
+  },
+  {
+    "description": "You ask to “borrow” a berry for a taste test and walk off with 700.",
+    "value": 700,
+    "rarity": "rare"
+  },
+  {
+    "description": "You act as if you’ve spotted a rare berry, then snatch 500 from another Parasaurolophus' pile.",
+    "value": 500,
+    "rarity": "uncommon"
+  },
+  {
+    "description": "You pretend to “inspect” their berries for quality and leave with 400 in hand.",
+    "value": 400,
+    "rarity": "common"
+  },
+  {
+    "description": "You offer a berry “cleaning service” and take 500 berries as payment.",
+    "value": 500,
+    "rarity": "uncommon"
+  },
+  {
+    "description": "You convince the herd that berries need “proper storage,” then take 600 while they help.",
+    "value": 600,
+    "rarity": "rare"
+  },
+  {
+    "description": "You distract a friend with a berry joke, then swipe 350 berries while they laugh.",
+    "value": 350,
+    "rarity": "common"
+  },
+  {
+    "description": "You tell them you’ve found a “berry secret,” then take 500 berries as part of the discovery!",
+    "value": 500,
+    "rarity": "uncommon"
+  }
+]
