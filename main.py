@@ -1,9 +1,8 @@
 """
 TODO:
-- Write /berry steal.
-- Write all the hunting outcomes
+GAMBLING!!!
 
-after all that is done, THEN we write the gambling part
+write blackjack, roulette, slots
 """
 import asyncio
 import os
