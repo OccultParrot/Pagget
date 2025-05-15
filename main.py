@@ -5,13 +5,14 @@ TODO:
 
 after all that is done, THEN we write the gambling part
 """
-
+import asyncio
 import os
 import sys
 import json
 import random
 import math
 import requests
+import time
 from json import JSONEncoder
 from typing import List, Optional, Literal
 import atexit
@@ -115,6 +116,17 @@ def validate_discord_token(token: str) -> bool:
     except Exception as e:
         print("Error validating token:", e)
         return False
+
+
+def organise_rarities(dictionary: dict[int, List[Affliction | GatherOutcome]], index: int):
+    commons = [item for item in dictionary[index] if item.rarity.lower() == "common"]
+    uncommons = [item for item in dictionary[index] if
+                 item.rarity.lower() == "uncommon"]
+    rares = [item for item in dictionary[index] if item.rarity.lower() == "rare"]
+    ultra_rares = [item for item in dictionary[index] if
+                   item.rarity.lower() == "ultra rare"]
+
+    return [commons, uncommons, rares, ultra_rares], [60, 25, 10, 5]
 
 
 class AfflictionBot:
@@ -703,7 +715,7 @@ class AfflictionBot:
                 await interaction.response.send_message("You don't have enough berries to bet that much.",
                                                         ephemeral=True)
                 return
-            pass
+            await interaction.response.send_message(":game_die: Rolling the dice...")
 
         @gambling_group.command(name="slots", description="Play slots with your berries")
         @app_commands.describe(bet="Amount of berries to bet")
@@ -713,7 +725,7 @@ class AfflictionBot:
                 await interaction.response.send_message("You don't have enough berries to bet that much.",
                                                         ephemeral=True)
                 return
-            pass
+            await interaction.response.send_message(":slot_machine: Spinning slot machine...")
 
         @gambling_group.command(name="blackjack", description="Play blackjack with your berries")
         @app_commands.describe(bet="Amount of berries to bet")
@@ -723,7 +735,7 @@ class AfflictionBot:
                 await interaction.response.send_message("You don't have enough berries to bet that much.",
                                                         ephemeral=True)
                 return
-            pass
+            await interaction.response.send_message(":spades: Starting blackjack game...")
 
         return gambling_group
 
@@ -916,7 +928,8 @@ class AfflictionBot:
             if message.author == self.client.user:
                 return
                 # Handle messages here if needed
-            pass  # TODO: Remove pass when implementing message handling
+            if self.client.user in message.mentions:
+                await message.channel.send('Hello!')
 
     # --- Add this method to your class ---
     def _print_command_item_recursive(self, command_item, base_indent_str, parent_group_path_parts_for_log):
@@ -935,7 +948,7 @@ class AfflictionBot:
             # Assuming has_admin_check is defined elsewhere and accessible
             is_admin = has_admin_check(command_item)
         except NameError:
-            # Fallback or default if has_admin_check is not found - adjust as needed
+            # Fallback or default if it has_admin_check is not found - adjust as needed
             self.logger.log(
                 f"Warning: has_admin_check function not found for command '{log_full_path}'. Assuming USER.", "Bot")
             is_admin = False
@@ -1049,36 +1062,17 @@ class AfflictionBot:
 
         return None
 
-    def _roll_for_gathering_occurrence(self, guild_id: int, type: Literal["hunt", "steal"]) -> GatherOutcome:
+    def _roll_for_gathering_occurrence(self, guild_id: int, gather_type: Literal["hunt", "steal"]) -> GatherOutcome:
         """
         Roll for a hunting occurrence based on the configured chance.
         
         Returns:
             A HuntOutcome object representing the outcome of the hunt
         """
-        # TODO: Make a function do this, return rarity groups and rarity weights
-        if type == "hunt":
-            commons = [outcome for outcome in self.hunt_outcomes_dict[guild_id] if outcome.rarity.lower() == "common"]
-            uncommons = [outcome for outcome in self.hunt_outcomes_dict[guild_id] if
-                         outcome.rarity.lower() == "uncommon"]
-            rares = [outcome for outcome in self.hunt_outcomes_dict[guild_id] if outcome.rarity.lower() == "rare"]
-            ultra_rares = [outcome for outcome in self.hunt_outcomes_dict[guild_id] if
-                           outcome.rarity.lower() == "ultra rare"]
+        if gather_type == "hunt":
+            rarity_groups, rarity_weights = organise_rarities(self.hunt_outcomes_dict, guild_id)
         else:
-            commons = [outcome for outcome in self.steal_outcomes_dict[guild_id] if outcome.rarity.lower() == "common"]
-            uncommons = [outcome for outcome in self.steal_outcomes_dict[guild_id] if
-                         outcome.rarity.lower() == "uncommon"]
-            rares = [outcome for outcome in self.steal_outcomes_dict[guild_id] if outcome.rarity.lower() == "rare"]
-            ultra_rares = [outcome for outcome in self.steal_outcomes_dict[guild_id] if
-                           outcome.rarity.lower() == "ultra rare"]
-
-        rarity_groups = [commons, uncommons, rares, ultra_rares]
-        rarity_weights = [60, 25, 10, 5]
-
-        if sum(rarity_weights) != 100:
-            self.console.print("[red]Error: Rarity weights must sum to 100")
-            self.logger.log("[red]Error: Rarity weights must sum to 100")
-            return None
+            rarity_groups, rarity_weights = organise_rarities(self.steal_outcomes_dict, guild_id)
 
         selected_group = random.choices(rarity_groups, weights=rarity_weights, k=1)[0]
         return random.choice(selected_group)
