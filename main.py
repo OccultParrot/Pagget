@@ -128,6 +128,147 @@ def organise_rarities(dictionary: dict[int, List[Affliction | GatherOutcome]], i
     return [commons, uncommons, rares, ultra_rares], [60, 25, 10, 5]
 
 
+class Card:
+    def __init__(self, suit: Literal["hearts", "diamonds", "clubs", "spades"],
+                 rank: Literal["2", "3", "4", "5", "6", "7", "8", "9", "10", "Jack", "Queen", "King", "Ace"]):
+        self.suit = suit
+        self.rank = rank
+
+    def __str__(self):
+        return f"{self.rank.title()} :{self.suit}:"
+
+    def __int__(self):
+        royals = ["jack", "queen", "king"]
+        if self.rank.lower() in royals:
+            return 11 + royals.index(self.rank.lower())
+        elif self.rank == "Ace":
+            return 1
+        return int(self.rank)
+
+
+class UserSpecificButtonView(discord.ui.View):
+    """ A view that holds the user that called the command, so that children can access it """
+
+    def __init__(self, user: discord.User):
+        self.user = user
+
+        super().__init__(timeout=180)
+
+
+class BlackjackButtonView(UserSpecificButtonView):
+    """ The view that holds all the buttons for the blackjack game """
+
+    def __init__(self, user: discord.User):
+        super().__init__(user)
+
+        self.user_score: int = 0
+        self.house_score: int = 0
+        self.deck: List[Card] = []
+        self.hand: List[Card] = []
+        self.dealers_hand: List[Card] = []
+
+        for s in range(4):
+            # Determine Suit
+            suit: str = "hearts"
+            if s == 1:
+                suit = "spades"
+            elif s == 2:
+                suit = "diamonds"
+            elif s == 3:
+                suit = "clubs"
+            for r in range(13):
+                # Determine Rank
+                rank: str
+                if r == 1:
+                    rank = "ace"
+                elif r == 10:
+                    rank = "jack"
+                elif r == 11:
+                    rank = "queen"
+                elif r == 12:
+                    rank = "king"
+                else:
+                    rank = str(r + 1)
+
+                self.deck.append(Card(suit, rank))
+
+        random.shuffle(self.deck)
+
+        # Deal two cards for the dealer
+        self.dealers_hand.append(self.deck.pop(0))
+        self.dealers_hand.append(self.deck.pop(0))
+
+        hit_button = discord.ui.Button(label="Hit", style=discord.ButtonStyle.primary)
+        hit_button.callback = self._hit_callback
+
+        stand_button = discord.ui.Button(label="Stand", style=discord.ButtonStyle.success)
+        stand_button.callback = self._stand_callback
+
+        self.add_item(hit_button)
+        self.add_item(stand_button)
+
+    async def _hit_callback(self, interaction: discord.Interaction):
+        self._update("hit")
+
+        if not self._evaluate_hand():
+            await interaction.response.edit_message(embed=self._get_lost_embed(), view=None)
+            return
+
+        await interaction.response.edit_message(embed=self.get_play_embed())
+
+    async def _stand_callback(self, interaction: discord.Interaction):
+        self._update("stand")
+        await interaction.response.send_message("Stand!")
+
+    def _evaluate_hand(self):
+        hand_score = sum([int(card) for card in self.hand])
+
+        if hand_score < 21:
+            return True
+        return False
+
+    def get_play_embed(self) -> discord.Embed:
+        embed = discord.Embed(title="Blackjack",
+                              description="Try to get as close to 21 as you can, but dont go over!")
+
+        embed.set_footer(text="You can hit or stand. If you hit, you will be dealt another card.")
+        embed.add_field(name="Your Score", value=sum([int(card) for card in self.hand]), inline=True)
+        embed.add_field(name="House Score", value=0, inline=True)
+        embed.add_field(name="Drawn Cards", value=", ".join([str(card) for card in self.hand]), inline=False)
+        embed.add_field(name="Dealers Cards", value=", ".join(
+            [str(card) if self.dealers_hand.index(card) == 0 else "?" for card in self.dealers_hand]), inline=False)
+
+        return embed
+    
+    def _update(self, action: Literal["hit", "stand"]):
+        # TODO: Finish update logic
+        if action == "hit":
+            self.hand.append(self.deck.pop())
+        
+        elif action == "stand":
+            self.house_score = sum([int(card) for card in self.dealers_hand])
+
+    def _get_lost_embed(self) -> discord.Embed:
+        embed = self.get_play_embed()
+
+        embed.remove_footer()
+        embed.description = "You busted! You lost all the berries you bet!"
+
+        return embed
+
+
+def _get_win_embed(self) -> discord.Embed:
+    pass
+
+
+class RouletteButtonView(UserSpecificButtonView):
+    """ The view that holds all the buttons for the roulette game """
+
+
+class SlotsButtonView(UserSpecificButtonView):
+    """ The view that holds all the buttons for the slots game """
+
+
 class AfflictionBot:
     """Main bot class to handle Discord interactions and affliction management."""
 
@@ -268,13 +409,6 @@ class AfflictionBot:
             return []  # Return empty list if file not found
 
     def _load_json_steal_outcomes(self, guild_id: int) -> List[GatherOutcome]:
-        def _load_json_hunt_outcomes(self, guild_id: int) -> List[GatherOutcome]:
-            """
-            Load hunt outcomes from a JSON file.
-            
-            :return: 
-                A list of HuntOutcome objects
-            """
 
         outcome_directory, outcome_path = get_paths("steal_outcomes", guild_id)
         outcome_path, valid = self._validate_json_load(outcome_directory, outcome_path,
@@ -730,11 +864,18 @@ class AfflictionBot:
         @app_commands.describe(bet="Amount of berries to bet")
         # @app_commands.checks.cooldown(1, 60, key=lambda i: i.user.id)  # Uncomment to enable cooldown
         async def blackjack(interaction: discord.Interaction, bet: int):
+            # region gambling boilerplate
             if 0 > bet > self._validate_user(interaction.user.id, interaction.guild_id):
                 await interaction.response.send_message("You don't have enough berries to bet that much.",
                                                         ephemeral=True)
                 return
-            await interaction.response.send_message(":spades: Starting blackjack game...")
+
+            # endregion
+
+            view = BlackjackButtonView(interaction.user)
+
+            embed = view.get_play_embed()
+            await interaction.response.send_message(embed=embed, view=view)
 
         return gambling_group
 
