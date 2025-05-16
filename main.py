@@ -930,7 +930,6 @@ class AfflictionBot:
             if self.client.user in message.mentions:
                 await message.channel.send('Hello!')
 
-    # --- Add this method to your class ---
     def _print_command_item_recursive(self, command_item, base_indent_str, parent_group_path_parts_for_log):
         """
         Recursively prints a command item (command or group) and its children if it's a group.
@@ -938,7 +937,6 @@ class AfflictionBot:
         """
         prefix = "• "
 
-        # Construct the full command path for logging (e.g., "settings user profile")
         current_full_path_parts = parent_group_path_parts_for_log + [command_item.name]
         log_full_path = " ".join(current_full_path_parts)
 
@@ -955,27 +953,21 @@ class AfflictionBot:
         admin_status = "[purple]ADMIN[/]" if is_admin else "[green]USER[/]"
         description = getattr(command_item, 'description', 'No description available')
 
-        # Console output: Display only the current command/group name, nested visually
         self.console.print(
             f"{base_indent_str}{prefix}[bold]{command_item.name}[/] {admin_status} - {description}"
         )
 
-        # Logger output: Log with the full path for clarity
         item_type_for_log = "Sub-Group" if isinstance(command_item, app_commands.Group) else "Subcommand"
         self.logger.log(
             f"{base_indent_str}{prefix}{item_type_for_log}: /{log_full_path} {admin_status} - {description}",
             "Bot"
         )
 
-        # If the current item is a group, recurse for its children
         if isinstance(command_item, app_commands.Group):
-            # Increase indentation for the next level of nesting
             child_base_indent_str = base_indent_str + "  "
 
-            # Sort sub-items by name for consistent output at this level
             sorted_sub_items = sorted(command_item.commands, key=lambda c: c.name)
             for sub_item in sorted_sub_items:
-                # Recursive call for each sub-item of the current group
                 self._print_command_item_recursive(sub_item, child_base_indent_str, current_full_path_parts)
 
     def _roll_for_afflictions(self, guild_id: int, is_minor: bool = False) -> List[Affliction]:
