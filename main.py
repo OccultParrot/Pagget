@@ -10,6 +10,8 @@ import sys
 import json
 import random
 import math
+import warnings
+
 import requests
 import time
 from json import JSONEncoder
@@ -145,21 +147,34 @@ class Card:
             return 1
         return int(self.rank)
 
+# TODO: Write Roulette
+class Roulette:
+    def __init__(self, user: discord.User, bet: int, users_dict: dict[int, int]):
+        pass
 
-class UserSpecificButtonView(discord.ui.View):
-    """ A view that holds the user that called the command, so that children can access it """
+    async def run(self):
+        pass
 
-    def __init__(self, user: discord.User):
+    async def _update(self):
+        pass
+    
+# TODO: Write Slots
+class Slots:
+    def __init__(self, user: discord.User, bet: int, users_dict: dict[int, int]):
+        pass
+
+    async def run(self):
+        pass
+
+    async def _update(self):
+        pass
+
+
+class Blackjack:
+    def __init__(self, user: discord.User, bet: int, users_dict: dict[int, int]):
+        self.users_dict = users_dict
         self.user = user
-
-        super().__init__(timeout=180)
-
-
-class BlackjackButtonView(UserSpecificButtonView):
-    """ The view that holds all the buttons for the blackjack game """
-
-    def __init__(self, user: discord.User):
-        super().__init__(user)
+        self.bet = bet
 
         self.user_score: int = 0
         self.house_score: int = 0
@@ -167,6 +182,62 @@ class BlackjackButtonView(UserSpecificButtonView):
         self.hand: List[Card] = []
         self.dealers_hand: List[Card] = []
 
+        self._initialize_deck()
+
+        # Deal two cards for the dealer
+        self.dealers_hand.append(self.deck.pop(0))
+        self.dealers_hand.append(self.deck.pop(0))
+
+        # Deal one card to the player
+        self.hand.append(self.deck.pop(0))
+
+        # Setting up 
+        self.view = discord.ui.View(timeout=180)
+
+        hit_button = discord.ui.Button(label="Hit", style=discord.ButtonStyle.primary)
+        hit_button.callback = self._hit_callback
+        self.view.add_item(hit_button)
+
+        stand_button = discord.ui.Button(label="Stand", style=discord.ButtonStyle.success)
+        stand_button.callback = self._stand_callback
+        self.view.add_item(stand_button)
+
+    async def run(self, interaction: discord.Interaction):
+        """ Sends the game embed and starts the game """
+        await interaction.response.send_message(embed=self._get_embed("play"), view=self.view)
+
+    async def _update(self, action: Literal["hit", "stand"], interaction: discord.Interaction):
+        """ Runs all the logic necessary to update the game """
+        # If it is not the user that originally called the command, then ignore them
+        if interaction.user.id != self.user.id:
+            await interaction.response.send_message("Only the user that started the game can play.", ephemeral=True)
+            return  # Return so the rest of the code does not run
+
+        player_score = self._get_hand_score(self.hand)
+
+        # When the user hits, add a card
+        if action == "hit":
+            self.hand.append(self.deck.pop(0))
+
+        # If the user ever hits 21 or goes over, end the game depending on what occurs
+        if player_score == 21:
+            await interaction.response.edit_message(embed=self._get_embed("won"), view=self.view)
+            self.users_dict[interaction.user.id] += self.bet * 2
+            return
+        elif player_score > 21:
+            await interaction.response.edit_message(embed=self._get_embed("lost"), view=self.view)
+            return
+
+        # When they stand, the game is over
+        if action == "stand":
+            if self._get_hand_score(self.dealers_hand) >= player_score:
+                await interaction.response.edit_message(embed=self._get_embed("lost"), view=self.view)
+                return
+            await interaction.response.edit_message(embed=self._get_embed("won"), view=self.view)
+            self.users_dict[interaction.user.id] += self.bet * 2
+            return
+
+    def _initialize_deck(self):
         for s in range(4):
             # Determine Suit
             suit: str = "hearts"
@@ -194,79 +265,42 @@ class BlackjackButtonView(UserSpecificButtonView):
 
         random.shuffle(self.deck)
 
-        # Deal two cards for the dealer
-        self.dealers_hand.append(self.deck.pop(0))
-        self.dealers_hand.append(self.deck.pop(0))
+    def _get_embed(self, status: Literal["play", "won", "lost"]) -> discord.Embed:
+        if status == "play":
+            embed = discord.Embed(title="Blackjack",
+                                  description="Try to get as close to 21 as you can, but dont go over!")
 
-        hit_button = discord.ui.Button(label="Hit", style=discord.ButtonStyle.primary)
-        hit_button.callback = self._hit_callback
+            embed.set_footer(text="You can hit or stand. If you hit, you will be dealt another card.")
+        elif status == "win":
+            self.view = None
+            embed = discord.Embed(title="Blackjack",
+                                  description="You won!",
+                                  color=discord.Color.green())
 
-        stand_button = discord.ui.Button(label="Stand", style=discord.ButtonStyle.success)
-        stand_button.callback = self._stand_callback
+        else:
+            self.view = None
+            embed = discord.Embed(title="Blackjack",
+                                  description="You busted! You lost all the berries you bet!",
+                                  color=discord.Color.red())
 
-        self.add_item(hit_button)
-        self.add_item(stand_button)
-
-    async def _hit_callback(self, interaction: discord.Interaction):
-        self._update("hit")
-
-        if not self._evaluate_hand():
-            await interaction.response.edit_message(embed=self._get_lost_embed(), view=None)
-            return
-
-        await interaction.response.edit_message(embed=self.get_play_embed())
-
-    async def _stand_callback(self, interaction: discord.Interaction):
-        self._update("stand")
-        await interaction.response.send_message("Stand!")
-
-    def _evaluate_hand(self):
-        hand_score = sum([int(card) for card in self.hand])
-
-        if hand_score < 21:
-            return True
-        return False
-
-    def get_play_embed(self) -> discord.Embed:
-        embed = discord.Embed(title="Blackjack",
-                              description="Try to get as close to 21 as you can, but dont go over!")
-
-        embed.set_footer(text="You can hit or stand. If you hit, you will be dealt another card.")
-        embed.add_field(name="Your Score", value=sum([int(card) for card in self.hand]), inline=True)
+        embed.add_field(name="Your Score", value=self._get_hand_score(self.hand), inline=True)
         embed.add_field(name="House Score", value=0, inline=True)
         embed.add_field(name="Drawn Cards", value=", ".join([str(card) for card in self.hand]), inline=False)
         embed.add_field(name="Dealers Cards", value=", ".join(
             [str(card) if self.dealers_hand.index(card) == 0 else "?" for card in self.dealers_hand]), inline=False)
 
         return embed
-    
-    def _update(self, action: Literal["hit", "stand"]):
-        # TODO: Finish update logic
-        if action == "hit":
-            self.hand.append(self.deck.pop())
-        
-        elif action == "stand":
-            self.house_score = sum([int(card) for card in self.dealers_hand])
 
-    def _get_lost_embed(self) -> discord.Embed:
-        embed = self.get_play_embed()
+    @staticmethod
+    def _get_hand_score(hand: List[Card]) -> int:
+        """ Returns the total score of the users hand """
+        return sum([int(card) for card in hand])
 
-        embed.remove_footer()
-        embed.description = "You busted! You lost all the berries you bet!"
+    def _hit_callback(self, interaction: discord.Interaction):
+        self._update("hit", interaction)
 
-        return embed
-
-
-def _get_win_embed(self) -> discord.Embed:
-    pass
-
-
-class RouletteButtonView(UserSpecificButtonView):
-    """ The view that holds all the buttons for the roulette game """
-
-
-class SlotsButtonView(UserSpecificButtonView):
-    """ The view that holds all the buttons for the slots game """
+    def _stand_callback(self, interaction: discord.Interaction):
+        self._update("stand", interaction)
 
 
 class AfflictionBot:
@@ -864,18 +898,13 @@ class AfflictionBot:
         @app_commands.describe(bet="Amount of berries to bet")
         # @app_commands.checks.cooldown(1, 60, key=lambda i: i.user.id)  # Uncomment to enable cooldown
         async def blackjack(interaction: discord.Interaction, bet: int):
-            # region gambling boilerplate
             if 0 > bet > self._validate_user(interaction.user.id, interaction.guild_id):
                 await interaction.response.send_message("You don't have enough berries to bet that much.",
                                                         ephemeral=True)
                 return
 
-            # endregion
-
-            view = BlackjackButtonView(interaction.user)
-
-            embed = view.get_play_embed()
-            await interaction.response.send_message(embed=embed, view=view)
+            game = Blackjack(interaction.user, bet, self.balances_dict)
+            await game.run(interaction)
 
         return gambling_group
 
