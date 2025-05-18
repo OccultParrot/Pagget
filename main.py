@@ -143,7 +143,7 @@ class Card:
         royals = ["jack", "queen", "king"]
         if self.rank.lower() in royals:
             return 11 + royals.index(self.rank.lower())
-        elif self.rank == "Ace":
+        elif self.rank.lower() == "ace":
             return 1
         return int(self.rank)
 
@@ -236,6 +236,9 @@ class Blackjack:
             await interaction.response.edit_message(embed=self._get_embed("won"), view=self.view)
             self.users_dict[interaction.user.id] += self.bet * 2
             return
+        
+        # If they still have a valid hand, and don't stand, send the regular embed, duh (I can't believe this stumped me for this long)
+        await interaction.response.edit_message(embed=self._get_embed("play"), view=self.view)
 
     def _initialize_deck(self):
         for s in range(4):
@@ -296,11 +299,11 @@ class Blackjack:
         """ Returns the total score of the users hand """
         return sum([int(card) for card in hand])
 
-    def _hit_callback(self, interaction: discord.Interaction):
-        self._update("hit", interaction)
+    async def _hit_callback(self, interaction: discord.Interaction):
+        await self._update("hit", interaction)
 
-    def _stand_callback(self, interaction: discord.Interaction):
-        self._update("stand", interaction)
+    async def _stand_callback(self, interaction: discord.Interaction):
+        await self._update("stand", interaction)
 
 
 class AfflictionBot:
