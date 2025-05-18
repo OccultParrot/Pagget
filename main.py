@@ -995,12 +995,11 @@ class AfflictionBot:
         @app_commands.describe(bet="Amount of berries to bet")
         # @app_commands.checks.cooldown(1, 60, key=lambda i: i.user.id)  # Uncomment to enable cooldown
         async def blackjack(interaction: discord.Interaction, bet: int):
-            if 0 > bet > self._validate_user(interaction.user.id, interaction.guild_id):
-                print("Test")
+            # If the minimum bet is greater than the bet, or the bet is greater than the user's balance, return an error
+            if 100 > bet > self._validate_user(interaction.user.id, interaction.guild_id):
                 await interaction.response.send_message("You don't have enough berries to bet that much.",
                                                         ephemeral=True)
                 return
-            print("Test 2")
             game = Blackjack(interaction.user, bet, self.balances_dict)
             await game.run(interaction)
 
