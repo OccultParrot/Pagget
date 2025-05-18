@@ -172,6 +172,7 @@ class Slots:
     async def _update(self):
         pass
 
+
 class Blackjack:
     def __init__(self, user: discord.User, bet: int, users_dict: dict[int, int]):
         self.users_dict = users_dict
@@ -237,7 +238,7 @@ class Blackjack:
             if hasattr(interaction, "original_response"):
                 self.message = await interaction.original_response()
                 await self._end_game()
-    
+
     @staticmethod
     def _get_hand_score(hand: List[Card]) -> int:
         score = sum(int(card) for card in hand)
@@ -883,7 +884,8 @@ class AfflictionBot:
                                 value=f"{self.guild_configs[interaction.guild_id].minor_chance}%", inline=False)
                 embed.add_field(name="Starting Pay", value=f"{self.guild_configs[interaction.guild_id].starting_pay}",
                                 inline=False)
-                embed.add_field(name="Minimum Bet", value=f"{self.guild_configs[interaction.guild_id].minimum_bet}",)
+                embed.add_field(name="Minimum Bet", value=f"{self.guild_configs[interaction.guild_id].minimum_bet}",
+                                inline=False)
 
                 self._save_json(interaction.guild_id, "guild_configs", self.guild_configs[interaction.guild_id],
                                 cls=GuildConfigEncoder)
@@ -1002,12 +1004,14 @@ class AfflictionBot:
         async def blackjack(interaction: discord.Interaction, bet: int):
             # If the minimum bet is greater than the bet, or the bet is greater than the user's balance, return an error
             if bet > self._validate_user(interaction.user.id, interaction.guild_id):
-                await interaction.response.send_message(f"You don't have enough berries to bet that much.\n-# Your balance: {self._validate_user(interaction.user.id, interaction.guild_id)}.",
-                                                        ephemeral=True)
+                await interaction.response.send_message(
+                    f"You don't have enough berries to bet that much.\n-# Your balance: {self._validate_user(interaction.user.id, interaction.guild_id)}.",
+                    ephemeral=True)
                 return
             if self.guild_configs[interaction.guild_id].minimum_bet > bet:
-                await interaction.response.send_message(f"You bet *{bet}*, but the minimum bet is **{self.guild_configs[interaction.guild_id].minimum_bet}**.")
-    
+                await interaction.response.send_message(
+                    f"You bet *{bet}*, but the minimum bet is **{self.guild_configs[interaction.guild_id].minimum_bet}**.")
+
             self.balances_dict[interaction.user.id] -= bet
             game = Blackjack(interaction.user, bet, self.balances_dict)
             await game.run(interaction)
@@ -1198,7 +1202,7 @@ class AfflictionBot:
 
             if message.author == self.client.user:
                 return
-            
+
             # Handle messages here if needed
 
             # Only listen to the favored ones 😇
@@ -1206,7 +1210,7 @@ class AfflictionBot:
                 if "berries pls" in message.content.lower():
                     if random.random() < 0.5:
                         amount = random.randint(1, 1000)
-                        self.balances_dict[message.author.id] =+ amount
+                        self.balances_dict[message.author.id] = + amount
                         await message.channel.send(f"Ok poor boy, I'll give you *{amount}* berries")
                     else:
                         await message.channel.send(f"Bro, stop being such a whiner. Just work :skull:")
