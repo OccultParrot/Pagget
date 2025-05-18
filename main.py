@@ -2,7 +2,8 @@
 TODO:
 GAMBLING!!!
 
-write blackjack, roulette, slots
+write roulette, slots
+stress test blackjack
 """
 import asyncio
 import os
@@ -142,10 +143,11 @@ class Card:
     def __int__(self):
         royals = ["jack", "queen", "king"]
         if self.rank.lower() in royals:
-            return 11 + royals.index(self.rank.lower())
+            return 10
         elif self.rank.lower() == "ace":
-            return 1
+            return 11
         return int(self.rank)
+
 
 # TODO: Write Roulette
 class Roulette:
@@ -157,7 +159,8 @@ class Roulette:
 
     async def _update(self):
         pass
-    
+
+
 # TODO: Write Slots
 class Slots:
     def __init__(self, user: discord.User, bet: int, users_dict: dict[int, int]):
@@ -169,30 +172,23 @@ class Slots:
     async def _update(self):
         pass
 
-
 class Blackjack:
     def __init__(self, user: discord.User, bet: int, users_dict: dict[int, int]):
         self.users_dict = users_dict
         self.user = user
         self.bet = bet
+        self.game_over = False
+        self.message: Optional[discord.Message] = None
 
-        self.user_score: int = 0
-        self.house_score: int = 0
         self.deck: List[Card] = []
-        self.hand: List[Card] = []
-        self.dealers_hand: List[Card] = []
+        self.player_hand: List[Card] = []
+        self.dealer_hand: List[Card] = []
 
         self._initialize_deck()
+        self._initial_deal()
 
-        # Deal two cards for the dealer
-        self.dealers_hand.append(self.deck.pop(0))
-        self.dealers_hand.append(self.deck.pop(0))
-
-        # Deal one card to the player
-        self.hand.append(self.deck.pop(0))
-
-        # Setting up 
         self.view = discord.ui.View(timeout=180)
+        self.view.on_timeout = self._on_timeout
 
         hit_button = discord.ui.Button(label="Hit", style=discord.ButtonStyle.primary)
         hit_button.callback = self._hit_callback
@@ -202,108 +198,204 @@ class Blackjack:
         stand_button.callback = self._stand_callback
         self.view.add_item(stand_button)
 
-    async def run(self, interaction: discord.Interaction):
-        """ Sends the game embed and starts the game """
-        await interaction.response.send_message(embed=self._get_embed("play"), view=self.view)
-
-    async def _update(self, action: Literal["hit", "stand"], interaction: discord.Interaction):
-        """ Runs all the logic necessary to update the game """
-        # If it is not the user that originally called the command, then ignore them
-        if interaction.user.id != self.user.id:
-            await interaction.response.send_message("Only the user that started the game can play.", ephemeral=True)
-            return  # Return so the rest of the code does not run
-
-        player_score = self._get_hand_score(self.hand)
-
-        # When the user hits, add a card
-        if action == "hit":
-            self.hand.append(self.deck.pop(0))
-
-        # If the user ever hits 21 or goes over, end the game depending on what occurs
-        if player_score == 21:
-            await interaction.response.edit_message(embed=self._get_embed("won"), view=self.view)
-            self.users_dict[interaction.user.id] += self.bet * 2
-            return
-        elif player_score > 21:
-            await interaction.response.edit_message(embed=self._get_embed("lost"), view=self.view)
-            return
-
-        # When they stand, the game is over
-        if action == "stand":
-            if self._get_hand_score(self.dealers_hand) >= player_score:
-                await interaction.response.edit_message(embed=self._get_embed("lost"), view=self.view)
-                return
-            await interaction.response.edit_message(embed=self._get_embed("won"), view=self.view)
-            self.users_dict[interaction.user.id] += self.bet * 2
-            return
-        
-        # If they still have a valid hand, and don't stand, send the regular embed, duh (I can't believe this stumped me for this long)
-        await interaction.response.edit_message(embed=self._get_embed("play"), view=self.view)
-
     def _initialize_deck(self):
-        for s in range(4):
-            # Determine Suit
-            suit: str = "hearts"
-            if s == 1:
-                suit = "spades"
-            elif s == 2:
-                suit = "diamonds"
-            elif s == 3:
-                suit = "clubs"
-            for r in range(13):
-                # Determine Rank
-                rank: str
-                if r == 1:
-                    rank = "ace"
-                elif r == 10:
-                    rank = "jack"
-                elif r == 11:
-                    rank = "queen"
-                elif r == 12:
-                    rank = "king"
-                else:
-                    rank = str(r + 1)
+        suits = ["hearts", "spades", "diamonds", "clubs"]
 
+        for suit in suits:
+            for rank in range(2, 11):
+                self.deck.append(Card(suit, str(rank)))
+
+            for rank in ["jack", "queen", "king", "ace"]:
                 self.deck.append(Card(suit, rank))
 
         random.shuffle(self.deck)
 
-    def _get_embed(self, status: Literal["play", "won", "lost"]) -> discord.Embed:
-        if status == "play":
-            embed = discord.Embed(title="Blackjack",
-                                  description="Try to get as close to 21 as you can, but dont go over!")
+    def _initial_deal(self):
+        self.player_hand.append(self.deck.pop(0))
+        self.player_hand.append(self.deck.pop(0))
 
-            embed.set_footer(text="You can hit or stand. If you hit, you will be dealt another card.")
-        elif status == "win":
-            self.view = None
-            embed = discord.Embed(title="Blackjack",
-                                  description="You won!",
-                                  color=discord.Color.green())
+        self.dealer_hand.append(self.deck.pop(0))
+        self.dealer_hand.append(self.deck.pop(0))
+
+        player_score = self._get_hand_score(self.player_hand)
+        dealer_score = self._get_hand_score(self.dealer_hand)
+
+        if player_score == 21 and dealer_score == 21:
+            self.game_over = True
+            self.result = "push"
+        elif player_score == 21:
+            self.game_over = True
+            self.result = "blackjack"
+        elif dealer_score == 21:
+            self.game_over = True
+            self.result = "dealer_blackjack"
+
+    async def run(self, interaction: discord.Interaction):
+        await interaction.response.send_message(embed=self._get_embed("play"), view=self.view)
+
+        if self.game_over:
+            if hasattr(interaction, "original_response"):
+                self.message = await interaction.original_response()
+                await self._end_game()
+    
+    @staticmethod
+    def _get_hand_score(self, hand: List[Card]) -> int:
+        score = sum(int(card) for card in hand)
+
+        ace_count = sum(1 for card in hand if card.rank == "ace")
+
+        while score > 21 and ace_count > 0:
+            score -= 10
+            ace_count -= 1
+
+        return score
+
+    def _dealer_play(self):
+        while self._get_hand_score(self.dealer_hand) < 17:
+            self.dealer_hand.append(self.deck.pop(0))
+
+        dealer_score = self._get_hand_score(self.dealer_hand)
+        player_score = self._get_hand_score(self.player_hand)
+
+        if dealer_score > 21:
+            self.result = "dealer_bust"
+        elif dealer_score > player_score:
+            self.result = "dealer_wins"
+        elif dealer_score < player_score:
+            self.result = "player_wins"
+        else:
+            self.result = "push"
+
+    def _handle_payout(self):
+        user_id = self.user.id
+
+        if user_id not in self.users_dict:
+            self.users_dict[user_id] = 0
+
+        if self.result == "blackjack":
+            self.users_dict[user_id] += int(self.bet * 2.5)
+        elif self.result in ["player_wins", "dealer_bust"]:
+            self.users_dict[user_id] += self.bet * 2
+        elif self.result == "push":
+            self.users_dict[user_id] += self.bet
+
+    def _get_embed(self, status: Literal["play", "ended"]) -> discord.Embed:
+        player_score = self._get_hand_score(self.player_hand)
+
+        if status == "play" and not self.game_over:
+            embed = discord.Embed(
+                title="Blackjack",
+                description="Try to get as close to 21 as you can, but don't go over!",
+                color=discord.Color.blue()
+            )
+            embed.set_footer(text="Hit to draw another card. Stand to end your turn.")
+
+            dealer_visible_score = int(self.dealer_hand[0])
+            dealer_cards = f"{self.dealer_hand[0]} and 1 hidden card"
 
         else:
-            self.view = None
-            embed = discord.Embed(title="Blackjack",
-                                  description="You busted! You lost all the berries you bet!",
-                                  color=discord.Color.red())
+            dealer_score = self._get_hand_score(self.dealer_hand)
+            dealer_visible_score = dealer_score
+            dealer_cards = ", ".join(str(card) for card in self.dealer_hand)
 
-        embed.add_field(name="Your Score", value=self._get_hand_score(self.hand), inline=True)
-        embed.add_field(name="House Score", value=0, inline=True)
-        embed.add_field(name="Drawn Cards", value=", ".join([str(card) for card in self.hand]), inline=False)
-        embed.add_field(name="Dealers Cards", value=", ".join(
-            [str(card) if self.dealers_hand.index(card) == 0 else "?" for card in self.dealers_hand]), inline=False)
+            if hasattr(self, 'result'):
+                if self.result == "blackjack":
+                    title = "Blackjack! You Win!"
+                    description = f"You got a blackjack! You won {int(self.bet * 1.5)} extra berries!"
+                    color = discord.Color.gold()
+                elif self.result == "dealer_blackjack":
+                    title = "Dealer Blackjack! You Lose"
+                    description = f"The dealer got a blackjack. You lost {self.bet} berries."
+                    color = discord.Color.red()
+                elif self.result == "player_wins":
+                    title = "You Win!"
+                    description = f"Your score was higher than the dealer. You won {self.bet} extra berries!"
+                    color = discord.Color.green()
+                elif self.result == "dealer_bust":
+                    title = "Dealer Bust! You Win!"
+                    description = f"The dealer went over 21. You won {self.bet} extra berries!"
+                    color = discord.Color.green()
+                elif self.result == "dealer_wins":
+                    title = "Dealer Wins"
+                    description = f"The dealer's score was higher. You lost {self.bet} berries."
+                    color = discord.Color.red()
+                elif self.result == "player_bust":
+                    title = "Bust! You Lose"
+                    description = f"You went over 21. You lost {self.bet} berries."
+                    color = discord.Color.red()
+                elif self.result == "push":
+                    title = "Push (Tie)"
+                    description = "It's a tie! Your bet has been returned."
+                    color = discord.Color.light_grey()
+            else:
+                title = "Game Over"
+                description = "The game has ended."
+                color = discord.Color.light_grey()
+
+            embed = discord.Embed(title=title, description=description, color=color)
+
+        embed.add_field(name="Your Score", value=player_score, inline=True)
+        embed.add_field(name="Dealer Score", value=dealer_visible_score, inline=True)
+        embed.add_field(name="Your Bet", value=self.bet, inline=True)
+        embed.add_field(name="Your Hand", value=", ".join(str(card) for card in self.player_hand), inline=False)
+        embed.add_field(name="Dealer's Hand", value=dealer_cards, inline=False)
 
         return embed
 
-    @staticmethod
-    def _get_hand_score(hand: List[Card]) -> int:
-        """ Returns the total score of the users hand """
-        return sum([int(card) for card in hand])
+    async def _update_message(self):
+        if self.message:
+            await self.message.edit(embed=self._get_embed("ended"), view=None)
+
+    async def _end_game(self):
+        self.game_over = True
+        self._handle_payout()
+        await self._update_message()
+
+    async def _on_timeout(self):
+        if not self.game_over:
+            self.result = "timeout"
+            await self._end_game()
 
     async def _hit_callback(self, interaction: discord.Interaction):
-        await self._update("hit", interaction)
+        if interaction.user.id != self.user.id:
+            await interaction.response.send_message("Only the user that started the game can play.", ephemeral=True)
+            return
+
+        if not self.message:
+            self.message = interaction.message
+
+        if self.game_over:
+            await interaction.response.send_message("This game has already ended.", ephemeral=True)
+            return
+
+        self.player_hand.append(self.deck.pop(0))
+        player_score = self._get_hand_score(self.player_hand)
+
+        if player_score > 21:
+            self.result = "player_bust"
+            self.game_over = True
+            await interaction.response.defer()
+            await self._end_game()
+        else:
+            await interaction.response.edit_message(embed=self._get_embed("play"), view=self.view)
 
     async def _stand_callback(self, interaction: discord.Interaction):
-        await self._update("stand", interaction)
+        if interaction.user.id != self.user.id:
+            await interaction.response.send_message("Only the user that started the game can play.", ephemeral=True)
+            return
+
+        if not self.message:
+            self.message = interaction.message
+
+        if self.game_over:
+            await interaction.response.send_message("This game has already ended.", ephemeral=True)
+            return
+
+        self._dealer_play()
+        self.game_over = True
+
+        await interaction.response.defer()
+        await self._end_game()
 
 
 class AfflictionBot:
@@ -848,10 +940,12 @@ class AfflictionBot:
                 ephemeral=False)
 
         @berries_group.command(name="hunt", description="Hunt for some berries")
+        # @app_commands.checks.cooldown(1, 60, key=lambda i: i.user.id)  # Uncomment to enable cooldown
         async def hunt(interaction: discord.Interaction):
             await gather(interaction, "hunt")
 
         @berries_group.command(name="steal", description="Steal berries from another parasaur")
+        # @app_commands.checks.cooldown(1, 60, key=lambda i: i.user.id)  # Uncomment to enable cooldown
         async def steal(interaction: discord.Interaction):
             await gather(interaction, "steal")
 
@@ -901,7 +995,7 @@ class AfflictionBot:
         @app_commands.describe(bet="Amount of berries to bet")
         # @app_commands.checks.cooldown(1, 60, key=lambda i: i.user.id)  # Uncomment to enable cooldown
         async def blackjack(interaction: discord.Interaction, bet: int):
-            if 0 > bet > self._validate_user(interaction.user.id, interaction.guild_id):
+            if 100 > bet > self._validate_user(interaction.user.id, interaction.guild_id):
                 await interaction.response.send_message("You don't have enough berries to bet that much.",
                                                         ephemeral=True)
                 return
@@ -1026,9 +1120,6 @@ class AfflictionBot:
                         self.console.print(f"[red]Error syncing command tree with guild: {e}[/]")
                         self.logger.log(f"Error syncing command tree with guild: {e}", "BotError")
 
-            # ================================================================
-            # List all registered commands (using recursive approach)
-            # ================================================================
             self.console.print("\n[bold underline]Registered Commands:[/]")
             self.logger.log("Registered Commands:", "Bot")
 
@@ -1061,7 +1152,6 @@ class AfflictionBot:
                     self.logger.log(f"  Group: /{group.name} {admin_status_group} - {group.description}",
                                     "Bot")  # Added status to log
 
-                    # === Key: Initial call to the recursive function for sub-items ===
                     # Sets the initial indentation and path for items under this top-level group.
                     initial_sub_item_indent = "    "
                     sorted_sub_items = sorted(group.commands, key=lambda c: c.name)  # Sort sub-items
@@ -1069,12 +1159,10 @@ class AfflictionBot:
                         # Pass the group's name as the initial part of the path
                         self._print_command_item_recursive(sub_item, initial_sub_item_indent, [group.name])
 
-            # Print standalone commands (top-level)
             if standalone_commands:
                 self.console.print("\n[green bold]Standalone Commands:[/]")
                 for command in sorted(standalone_commands, key=lambda x: x.name):  # Sort standalone commands
                     try:
-                        # Assuming has_admin_check is defined elsewhere and accessible
                         is_admin_cmd = has_admin_check(command)
                     except NameError:
                         self.logger.log(
@@ -1097,11 +1185,17 @@ class AfflictionBot:
 
         @self.client.event
         async def on_message(message: discord.Message):
+            favored_ones = [767047725333086209]
+
             if message.author == self.client.user:
                 return
                 # Handle messages here if needed
-            if self.client.user in message.mentions:
-                await message.channel.send('Hello!')
+
+            # Only listen to the favored ones
+            if message.author in favored_ones:
+                if message.content == "Hey Pagget, gimme some money!":
+                    self.balances_dict[message.author.id] += 1000
+                    await message.channel.send(content="There ya go bud.")
 
     def _print_command_item_recursive(self, command_item, base_indent_str, parent_group_path_parts_for_log):
         """
