@@ -861,7 +861,7 @@ class AfflictionBot:
                                minor_chance="Percent chance of rolling minor afflictions (0-100)")
         @app_commands.checks.has_permissions(administrator=True)
         async def set_configs(interaction: discord.Interaction, species: str = None, chance: int = None,
-                              minor_chance: bool = None, starting_pay: int = None):
+                              minor_chance: bool = None, starting_pay: int = None, minimum_bet: int = None):
             try:
                 if species is not None:
                     self.guild_configs[interaction.guild_id].species = species
@@ -871,6 +871,8 @@ class AfflictionBot:
                     self.guild_configs[interaction.guild_id].minor_chance = minor_chance
                 if starting_pay is not None:
                     self.guild_configs[interaction.guild_id].starting_pay = starting_pay
+                if minimum_bet is not None:
+                    self.guild_configs[interaction.guild_id].minimum_bet = minimum_bet
 
                 embed = discord.Embed(title=f"{interaction.guild.name}'s Configuration",
                                       description="Guild configuration has been updated.")
@@ -881,6 +883,7 @@ class AfflictionBot:
                                 value=f"{self.guild_configs[interaction.guild_id].minor_chance}%", inline=False)
                 embed.add_field(name="Starting Pay", value=f"{self.guild_configs[interaction.guild_id].starting_pay}",
                                 inline=False)
+                embed.add_field(name="Minimum Bet", value=f"{self.guild_configs[interaction.guild_id].minimum_bet}",)
 
                 self._save_json(interaction.guild_id, "guild_configs", self.guild_configs[interaction.guild_id],
                                 cls=GuildConfigEncoder)
