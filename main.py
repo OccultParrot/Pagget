@@ -587,6 +587,8 @@ class AfflictionBot:
                 if not isinstance(raw_data, dict):
                     self.console.print("[yellow]Warning: Balances file is not in dictionary format. Converting...")
                     raw_data = {}
+                else:
+                    raw_data = {int(key): int(value) for key, value in raw_data.items()}
 
                 return raw_data
 
@@ -996,10 +998,14 @@ class AfflictionBot:
         # @app_commands.checks.cooldown(1, 60, key=lambda i: i.user.id)  # Uncomment to enable cooldown
         async def blackjack(interaction: discord.Interaction, bet: int):
             # If the minimum bet is greater than the bet, or the bet is greater than the user's balance, return an error
-            if 100 > bet > self._validate_user(interaction.user.id, interaction.guild_id):
-                await interaction.response.send_message("You don't have enough berries to bet that much.",
+            if bet > self._validate_user(interaction.user.id, interaction.guild_id):
+                await interaction.response.send_message(f"You don't have enough berries to bet that much.\n-# Your balance: {self._validate_user(interaction.user.id, interaction.guild_id)}.",
                                                         ephemeral=True)
                 return
+            if self.guild_configs[interaction.guild_id].minimum_bet > bet:
+                await interaction.response.send_message(f"You bet *{bet}*, but the minimum bet is **{self.guild_configs[interaction.guild_id].minimum_bet}**.")
+    
+            self.balances_dict[interaction.user.id] -= bet
             game = Blackjack(interaction.user, bet, self.balances_dict)
             await game.run(interaction)
 
@@ -1189,13 +1195,18 @@ class AfflictionBot:
 
             if message.author == self.client.user:
                 return
-                # Handle messages here if needed
+            
+            # Handle messages here if needed
 
-            # Only listen to the favored ones
-            if message.author in favored_ones:
-                if message.content == "Hey Pagget, gimme some money!":
-                    self.balances_dict[message.author.id] += 1000
-                    await message.channel.send(content="There ya go bud.")
+            # Only listen to the favored ones 😇
+            if message.author.id in favored_ones:
+                if "berries pls" in message.content.lower():
+                    if random.random() < 0.5:
+                        amount = random.randint(1, 1000)
+                        self.balances_dict[message.author.id] =+ amount
+                        await message.channel.send(f"Ok poor boy, I'll give you *{amount}* berries")
+                    else:
+                        await message.channel.send(f"Bro, stop being such a whiner. Just work :skull:")
 
     def _print_command_item_recursive(self, command_item, base_indent_str, parent_group_path_parts_for_log):
         """
@@ -1507,5 +1518,4 @@ class AfflictionBot:
 
 
 if __name__ == "__main__":
-    bot = AfflictionBot()
-    bot.run()
+    AfflictionBot().run()
