@@ -239,7 +239,7 @@ class Blackjack:
                 await self._end_game()
     
     @staticmethod
-    def _get_hand_score(self, hand: List[Card]) -> int:
+    def _get_hand_score(hand: List[Card]) -> int:
         score = sum(int(card) for card in hand)
 
         ace_count = sum(1 for card in hand if card.rank == "ace")
@@ -995,11 +995,12 @@ class AfflictionBot:
         @app_commands.describe(bet="Amount of berries to bet")
         # @app_commands.checks.cooldown(1, 60, key=lambda i: i.user.id)  # Uncomment to enable cooldown
         async def blackjack(interaction: discord.Interaction, bet: int):
-            if 100 > bet > self._validate_user(interaction.user.id, interaction.guild_id):
+            if 0 > bet > self._validate_user(interaction.user.id, interaction.guild_id):
+                print("Test")
                 await interaction.response.send_message("You don't have enough berries to bet that much.",
                                                         ephemeral=True)
                 return
-
+            print("Test 2")
             game = Blackjack(interaction.user, bet, self.balances_dict)
             await game.run(interaction)
 
