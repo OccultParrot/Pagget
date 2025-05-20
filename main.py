@@ -160,24 +160,14 @@ Dozens: Bet on numbers 1-12, 13-24, or 25-36 (2:1)
 
 
 class RouletteJoinView(discord.ui.View):
-    def __init__(self, submit_callback, roulette_instance):
+    def __init__(self, submit_callback: callable, roulette_instance):
         super().__init__(timeout=180)
         self.values: dict[str, str] = {}
         self.submit_callback = submit_callback
-        self.roulette_instance = roulette_instance
+        self.roulette_instance: Roulette = roulette_instance
         self.last_interaction: Optional[discord.Interaction] = None
         self.last_message_id: int = 0
-        self.bet_types: dict[str,str] = {
-            "red": "Red",
-            "black": "Black",
-            "even": "Even",
-            "odd": "Odd",
-            "low": "1-18",
-            "high": "19-36",
-            "dozen1": "1-12",
-            "dozen2": "13-24",
-            "dozen3": "25-36"
-        }
+        self.bet_types: dict[str, str] = roulette_instance.bet_types
 
         bet_type_select = discord.ui.Select(
             placeholder="Select a bet type",
@@ -347,7 +337,7 @@ class Roulette:
             send cancellation message
     """
 
-    def __init__(self, host: discord.User, hosts_bet: int, hosts_bet_type: Literal["black"],
+    def __init__(self, host: discord.User, hosts_bet: int, hosts_bet_type: str, bet_types: dict[str, str],
                  users_dict: dict[int, int]):
         self.users_dict = users_dict
         self.host = Player(host, hosts_bet, hosts_bet_type)
@@ -357,17 +347,7 @@ class Roulette:
 
         self.view = discord.ui.View(timeout=180)
         self.view.on_timeout = self._on_timeout
-        self.bet_types: dict[str,str] = {
-            "red": "Red",
-            "black": "Black",
-            "even": "Even",
-            "odd": "Odd",
-            "low": "1-18",
-            "high": "19-36",
-            "dozen1": "1-12",
-            "dozen2": "13-24",
-            "dozen3": "25-36"
-        }
+        self.bet_types: dict[str, str] = bet_types
 
         start_button = discord.ui.Button(label="Start", style=discord.ButtonStyle.success)
         start_button.callback = self._start_callback
@@ -419,7 +399,7 @@ class Roulette:
         elif status == "canceled":
             self.view = None
             embed = discord.Embed(
-                title= "Roulette (Canceled)",
+                title="Roulette (Canceled)",
                 description="The game has been canceled",
                 color=discord.Color.red()
             )
@@ -743,6 +723,18 @@ class AfflictionBot:
         self.logger = Logger(LOG_FILE)
 
         self.rarity_list = [("rare", "sparkles"), ("ultra rare", "star2")]
+
+        self.roulette_bet_types: dict[str, str] = {
+            "red": "Red",
+            "black": "Black",
+            "even": "Even",
+            "odd": "Odd",
+            "low": "1-18",
+            "high": "19-36",
+            "dozen1": "1-12",
+            "dozen2": "13-24",
+            "dozen3": "25-36"
+        }
 
         # Configure Discord client
         intents = discord.Intents(messages=True, guilds=True)
@@ -1302,24 +1294,14 @@ class AfflictionBot:
 
     def _register_gambling_commands(self) -> app_commands.Group:
         gambling_group = app_commands.Group(name="gambling", description="Gambling commands")
-        bet_types: dict[str,str] = {
-            "red": "Red",
-            "black": "Black",
-            "even": "Even",
-            "odd": "Odd",
-            "low": "1-18",
-            "high": "19-36",
-            "dozen1": "1-12",
-            "dozen2": "13-24",
-            "dozen3": "25-36"
-        }
+        
 
         # TODO: Add gambling commands
         @gambling_group.command(name="roulette", description="Play roulette with your berries")
         @app_commands.describe(bet="Amount of berries to bet")
         @app_commands.choices(
             bet_type=[
-                app_commands.Choice(name=name, value=value) for value, name in bet_types.items()
+                app_commands.Choice(name=name, value=value) for value, name in self.roulette_bet_types.items()
             ]
         )
         # @app_commands.checks.cooldown(1, 60, key=lambda i: i.user.id)  # Uncomment to enable cooldown
@@ -1328,7 +1310,7 @@ class AfflictionBot:
                 await interaction.response.send_message("You don't have enough berries to bet that much.",
                                                         ephemeral=True)
                 return
-            game = Roulette(interaction.user, bet, bet_type, self.balances_dict)
+            game = Roulette(interaction.user, bet, bet_type, self.roulette_bet_types, self.balances_dict)
             await game.run(interaction)
 
         @gambling_group.command(name="slots", description="Play slots with your berries")
