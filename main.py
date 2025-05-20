@@ -160,10 +160,9 @@ Dozens: Bet on numbers 1-12, 13-24, or 25-36 (2:1)
 
 
 class RouletteJoinView(discord.ui.View):
-    def __init__(self, submit_callback: callable, roulette_instance):
+    def __init__(self, roulette_instance):
         super().__init__(timeout=180)
         self.values: dict[str, str] = {}
-        self.submit_callback = submit_callback
         self.roulette_instance: Roulette = roulette_instance
         self.last_interaction: Optional[discord.Interaction] = None
         self.last_message_id: int = 0
@@ -192,7 +191,9 @@ class RouletteJoinView(discord.ui.View):
     async def _amount_callback(self, interaction: discord.Interaction):
         self.last_interaction = interaction
         self.last_message_id = interaction.message.id
-        await interaction.response.send_modal(BetAmountModal(self._submit_amount_callback, self.values))
+        await interaction.response.send_modal(BetAmountModal(self._submit_amount_callback, self.values,
+                                                             self.roulette_instance.users_dict[interaction.user.id],
+                                                             self.roulette_instance.min_bet))
 
     async def _submit_amount_callback(self):
         print(self.values)
@@ -237,7 +238,7 @@ class RouletteJoinView(discord.ui.View):
         elif action == "done":
             embed = discord.Embed(
                 title="Bet Submitted",
-                description="Your bet has been submitted.",
+                description="Your bet has been submitted. Funds removed from account.",
                 color=discord.Color.green()
             )
         elif action == "canceled":
@@ -259,10 +260,11 @@ class RouletteJoinView(discord.ui.View):
     async def _submit_callback(self, interaction: discord.Interaction):
         # Add the player to the game
         player = Player(interaction.user, int(self.values["bet_amount"]), self.values["bet_type"])
+        self.roulette_instance.users_dict[interaction.user.id] -= player.bet
         self.roulette_instance.players.append(player)
 
         # Update the original message
-        await self.roulette_instance._update_message("queue")
+        await self.roulette_instance.update_message("queue")
 
         # Update the current view
         self.clear_items()
@@ -274,20 +276,27 @@ class RouletteJoinView(discord.ui.View):
 
 
 class BetAmountModal(discord.ui.Modal):
-    def __init__(self, callback, values: dict[str, str]):
+    def __init__(self, callback, values: dict[str, str], user_balance: int, min_bet: int):
         super().__init__(title="Enter Bet Amount")
-        self.amount = discord.ui.TextInput(label="Bet Amount", placeholder="Bet Amount as a number", required=True)
+        self.amount = discord.ui.TextInput(label="Bet Amount",
+                                           placeholder=f"Balance: {user_balance}, Min Bet: {min_bet}", required=True)
         self.add_item(self.amount)
 
         self.submit_callback = callback
-
+        self.min_bet = min_bet
+        self.user_balance = user_balance
         self.values = values
 
     async def on_submit(self, interaction: discord.Interaction):
         try:
             bet_amount = int(self.amount.value)
-            if bet_amount <= 0:
-                await interaction.response.send_message("Bet amount must be greater than 0.", ephemeral=True)
+            if bet_amount < self.min_bet:
+                await interaction.response.send_message(
+                    f"Bet amount must be at least the minimum bet.\n-# Minimum Bet: {self.min_bet}", ephemeral=True)
+                return
+            elif bet_amount > self.user_balance:
+                await interaction.response.send_message(
+                    f"Bet amount must be less than your balance.\n-# Balance: {self.user_balance}", ephemeral=True)
                 return
         except ValueError:
             await interaction.response.send_message("Bet amount must be a number.", ephemeral=True)
@@ -338,12 +347,13 @@ class Roulette:
     """
 
     def __init__(self, host: discord.User, hosts_bet: int, hosts_bet_type: str, bet_types: dict[str, str],
-                 users_dict: dict[int, int]):
+                 users_dict: dict[int, int], min_bet: int):
         self.users_dict = users_dict
         self.host = Player(host, hosts_bet, hosts_bet_type)
         self.game_over = False
         self.message: discord.Message
         self.players: List[Player] = [self.host]
+        self.min_bet = min_bet
 
         self.view = discord.ui.View(timeout=180)
         self.view.on_timeout = self._on_timeout
@@ -377,7 +387,7 @@ class Roulette:
     async def _cancel_game(self):
         self.game_over = True
         self._handle_payout()
-        await self._update_message("canceled")
+        await self.update_message("canceled")
 
     async def _on_timeout(self):
         if not self.game_over:
@@ -415,37 +425,31 @@ class Roulette:
     def _handle_payout(self):
         pass
 
-    async def _update_message(self, action: Literal["play", "finished", "canceled", "queue"], interaction=None):
+    async def update_message(self, action: Literal["play", "finished", "canceled", "queue"], interaction=None):
         await self.message.edit(embed=self._get_embed(action), view=self.view)
 
     async def _join_callback(self, interaction: discord.Interaction):
-        user_balance = 1000  # TODO: use the actual users balance
-        view = RouletteJoinView(self._add_player, self)
+        view = RouletteJoinView(self)
         await interaction.response.send_message(embed=view.embed(), view=view, ephemeral=True)
 
-    # No longer needed as we're handling this in the RouletteJoinView class
-    async def _add_player(self, user: discord.User, values: dict[str, str]):
-        player = Player(user, int(values["bet_amount"]), values["bet_type"])
-        self.players.append(player)
-
-        # Update the original message
-        await self._update_message("queue")
-
     async def _start_callback(self, interaction: discord.Interaction):
-        pass
+        if interaction.user.id != self.players[0].user.id:
+            await interaction.response.send_message("Only host can start the game", ephemeral=True)
+            return
 
     async def _cancel_callback(self, interaction: discord.Interaction):
         for player in self.players:
             if interaction.user.id == player.user.id:
+                self.users_dict[player.user.id] += player.bet
                 self.players.remove(player)
-                await interaction.response.send_message("You left the game", ephemeral=True)
-                await self._update_message("queue", interaction)
+                await interaction.response.send_message("You left the game. Bet refunded", ephemeral=True)
+                await self.update_message("queue", interaction)
 
                 break
 
         if len(self.players) == 0:
             self.game_over = True
-            await self._update_message("canceled", interaction)
+            await self.update_message("canceled", interaction)
 
 
 class Card:
@@ -1294,7 +1298,6 @@ class AfflictionBot:
 
     def _register_gambling_commands(self) -> app_commands.Group:
         gambling_group = app_commands.Group(name="gambling", description="Gambling commands")
-        
 
         # TODO: Add gambling commands
         @gambling_group.command(name="roulette", description="Play roulette with your berries")
@@ -1310,7 +1313,11 @@ class AfflictionBot:
                 await interaction.response.send_message("You don't have enough berries to bet that much.",
                                                         ephemeral=True)
                 return
-            game = Roulette(interaction.user, bet, bet_type, self.roulette_bet_types, self.balances_dict)
+
+            self.balances_dict[interaction.user.id] -= bet
+
+            game = Roulette(interaction.user, bet, bet_type, self.roulette_bet_types, self.balances_dict,
+                            self.guild_configs[interaction.guild_id].minimum_bet)
             await game.run(interaction)
 
         @gambling_group.command(name="slots", description="Play slots with your berries")
