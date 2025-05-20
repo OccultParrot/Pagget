@@ -149,6 +149,7 @@ class Player:
         self.bet: int = bet
         self.bet_type: str = bet_type
 
+
 """
 Red/Black: Bet on all red or all black numbers (1:1)
 Odd/Even: Bet on all odd or all even numbers (1:1)
@@ -156,6 +157,8 @@ High/Low: Bet on numbers 1-18 or 19-36 (1:1)
 Dozens: Bet on numbers 1-12, 13-24, or 25-36 (2:1)
 
 """
+
+
 class RouletteJoinView(discord.ui.View):
     def __init__(self, submit_callback, roulette_instance):
         super().__init__(timeout=180)
@@ -164,13 +167,22 @@ class RouletteJoinView(discord.ui.View):
         self.roulette_instance = roulette_instance
         self.last_interaction: Optional[discord.Interaction] = None
         self.last_message_id: int = 0
+        self.bet_types: dict[str,str] = {
+            "red": "Red",
+            "black": "Black",
+            "even": "Even",
+            "odd": "Odd",
+            "low": "1-18",
+            "high": "19-36",
+            "dozen1": "1-12",
+            "dozen2": "13-24",
+            "dozen3": "25-36"
+        }
 
         bet_type_select = discord.ui.Select(
             placeholder="Select a bet type",
             options=[
-                discord.SelectOption(label="Number", value="number"),
-                discord.SelectOption(label="Color", value="color"),
-                discord.SelectOption(label="Range", value="range")
+                discord.SelectOption(label=label, value=value) for value, label in self.bet_types.items()
             ]
         )
         bet_type_select.callback = self._bet_type_callback
@@ -221,7 +233,7 @@ class RouletteJoinView(discord.ui.View):
                 description="Enter your bet amount in the modal below.",
                 color=discord.Color.blue()
             )
-            embed.add_field(name="Bet Type", value=self.values["bet_type"], inline=True)
+            embed.add_field(name="Bet Type", value=self.bet_types[self.values["bet_type"]], inline=True)
             embed.set_footer(text="Enter your bet amount to continue.")
         elif action == "submit":
             embed = discord.Embed(
@@ -229,7 +241,7 @@ class RouletteJoinView(discord.ui.View):
                 description="Click the button below to submit your bet.",
                 color=discord.Color.blue()
             )
-            embed.add_field(name="Bet Type", value=self.values["bet_type"], inline=True)
+            embed.add_field(name="Bet Type", value=self.bet_types[self.values["bet_type"]], inline=True)
             embed.add_field(name="Bet Amount", value=self.values["bet_amount"], inline=True)
             embed.set_footer(text="Click 'Submit' to continue. Click cancel to cancel your bet.")
         elif action == "done":
@@ -345,6 +357,17 @@ class Roulette:
 
         self.view = discord.ui.View(timeout=180)
         self.view.on_timeout = self._on_timeout
+        self.bet_types: dict[str,str] = {
+            "red": "Red",
+            "black": "Black",
+            "even": "Even",
+            "odd": "Odd",
+            "low": "1-18",
+            "high": "19-36",
+            "dozen1": "1-12",
+            "dozen2": "13-24",
+            "dozen3": "25-36"
+        }
 
         start_button = discord.ui.Button(label="Start", style=discord.ButtonStyle.success)
         start_button.callback = self._start_callback
@@ -371,17 +394,17 @@ class Roulette:
     async def _update(self):
         pass
 
-    async def _end_game(self):
+    async def _cancel_game(self):
         self.game_over = True
         self._handle_payout()
-        await self._update_message("ended")
+        await self._update_message("canceled")
 
     async def _on_timeout(self):
         if not self.game_over:
             self.result = "timeout"
-            await self._end_game()
+            await self._cancel_game()
 
-    def _get_embed(self, status: Literal["play", "ended", "queue"]) -> discord.Embed:
+    def _get_embed(self, status: Literal["play", "finished", "canceled", "queue"]) -> discord.Embed:
         if status == "queue":
             embed = discord.Embed(
                 title="Roulette",
@@ -391,14 +414,28 @@ class Roulette:
             for player in self.players:
                 embed.add_field(
                     name=f"{player.user.display_name} {':crown:' if self.players.index(player) == 0 else ''}",
-                    value=f"Bet: {player.bet} on {player.bet_type}", inline=False)
+                    value=f"Bet: {player.bet} on {self.bet_types[player.bet_type]}", inline=False)
             embed.set_footer(text="Click 'Join' to participate.")
+        elif status == "canceled":
+            self.view = None
+            embed = discord.Embed(
+                title= "Roulette (Canceled)",
+                description="The game has been canceled",
+                color=discord.Color.red()
+            )
+        else:
+            self.view = None
+            embed = discord.Embed(
+                title="How the hell did you do this one!",
+                description="I could have sworn this wasn't possible. Hmm...",
+                color=discord.Color.red()
+            )
         return embed
 
     def _handle_payout(self):
         pass
 
-    async def _update_message(self, action: Literal["queue", "play", "ended"], interaction=None):
+    async def _update_message(self, action: Literal["play", "finished", "canceled", "queue"], interaction=None):
         await self.message.edit(embed=self._get_embed(action), view=self.view)
 
     async def _join_callback(self, interaction: discord.Interaction):
@@ -428,7 +465,7 @@ class Roulette:
 
         if len(self.players) == 0:
             self.game_over = True
-            await self._update_message("ended", interaction)
+            await self._update_message("canceled", interaction)
 
 
 class Card:
@@ -1265,15 +1302,24 @@ class AfflictionBot:
 
     def _register_gambling_commands(self) -> app_commands.Group:
         gambling_group = app_commands.Group(name="gambling", description="Gambling commands")
+        bet_types: dict[str,str] = {
+            "red": "Red",
+            "black": "Black",
+            "even": "Even",
+            "odd": "Odd",
+            "low": "1-18",
+            "high": "19-36",
+            "dozen1": "1-12",
+            "dozen2": "13-24",
+            "dozen3": "25-36"
+        }
 
         # TODO: Add gambling commands
         @gambling_group.command(name="roulette", description="Play roulette with your berries")
         @app_commands.describe(bet="Amount of berries to bet")
         @app_commands.choices(
             bet_type=[
-                app_commands.Choice(name="Red", value="red"),
-                app_commands.Choice(name="Black", value="black"),
-                app_commands.Choice(name="Green", value="green")
+                app_commands.Choice(name=name, value=value) for value, name in bet_types.items()
             ]
         )
         # @app_commands.checks.cooldown(1, 60, key=lambda i: i.user.id)  # Uncomment to enable cooldown
