@@ -4,6 +4,9 @@ GAMBLING!!!
 
 write roulette, slots
 stress test blackjack
+
+make blackjack able to be wo
+
 """
 import asyncio
 import os
@@ -20,8 +23,9 @@ from typing import List, Optional, Literal
 import atexit
 
 import discord
-from discord import app_commands
+from discord import app_commands, Interaction
 import dotenv
+from discord._types import ClientT
 from discord.ext.commands import CommandOnCooldown
 from rich.console import Console
 
@@ -84,11 +88,11 @@ def get_affliction_embed(affliction: Affliction) -> discord.Embed:
     )
 
 
-def get_outcome_embed(outcome: GatherOutcome, old_balance: int, new_balance: int,
+def get_outcome_embed(gather_type: Literal["hunt", "steal"], outcome: GatherOutcome, old_balance: int, new_balance: int,
                       interaction: discord.Interaction) -> discord.Embed:
     """Create a Discord embed for a hunt outcome."""
     embed = discord.Embed(
-        title="Successful Hunt!" if outcome.value > 0 else "Failed Hunt!",
+        title=f"Successful {gather_type.title()}!" if outcome.value > 0 else f"Failed {gather_type.title()}!",
         description=outcome.description,
         color=get_outcome_color(outcome.value)
     )
@@ -131,6 +135,302 @@ def organise_rarities(dictionary: dict[int, List[Affliction | GatherOutcome]], i
     return [commons, uncommons, rares, ultra_rares], [60, 25, 10, 5]
 
 
+"""
+The view contains a callback, and a values dict
+when the user selects a bet type, we update the values dict, 
+and update the message with the new values and remove the select with a button prompting the user to enter their bet amount.
+The button will then send a modal for the user to enter their bet amount. After they enter their bet amount, they will be prompted with buttons for "cancel" and "join"
+"""
+
+
+class Player:
+    def __init__(self, user: discord.User, bet: int, bet_type: str):
+        self.user: discord.User = user
+        self.bet: int = bet
+        self.bet_type: str = bet_type
+
+"""
+Red/Black: Bet on all red or all black numbers (1:1)
+Odd/Even: Bet on all odd or all even numbers (1:1)
+High/Low: Bet on numbers 1-18 or 19-36 (1:1)
+Dozens: Bet on numbers 1-12, 13-24, or 25-36 (2:1)
+
+"""
+class RouletteJoinView(discord.ui.View):
+    def __init__(self, submit_callback, roulette_instance):
+        super().__init__(timeout=180)
+        self.values: dict[str, str] = {}
+        self.submit_callback = submit_callback
+        self.roulette_instance = roulette_instance
+        self.last_interaction: Optional[discord.Interaction] = None
+        self.last_message_id: int = 0
+
+        bet_type_select = discord.ui.Select(
+            placeholder="Select a bet type",
+            options=[
+                discord.SelectOption(label="Number", value="number"),
+                discord.SelectOption(label="Color", value="color"),
+                discord.SelectOption(label="Range", value="range")
+            ]
+        )
+        bet_type_select.callback = self._bet_type_callback
+        self.add_item(bet_type_select)
+
+    async def _bet_type_callback(self, interaction: discord.Interaction):
+        self.values["bet_type"] = interaction.data.get("values")[0]
+        print(self.values)
+        self.clear_items()
+
+        amount_button = discord.ui.Button(label="Enter Bet Amount", style=discord.ButtonStyle.primary)
+        amount_button.callback = self._amount_callback
+        self.add_item(amount_button)
+
+        await interaction.response.edit_message(embed=self.embed("amount"), view=self)
+
+    async def _amount_callback(self, interaction: discord.Interaction):
+        self.last_interaction = interaction
+        self.last_message_id = interaction.message.id
+        await interaction.response.send_modal(BetAmountModal(self._submit_amount_callback, self.values))
+
+    async def _submit_amount_callback(self):
+        print(self.values)
+        self.clear_items()
+
+        submit_button = discord.ui.Button(label="Submit", style=discord.ButtonStyle.success)
+        submit_button.callback = self._submit_callback
+        self.add_item(submit_button)
+
+        cancel_button = discord.ui.Button(label="Cancel", style=discord.ButtonStyle.danger)
+        cancel_button.callback = self._cancel_callback
+        self.add_item(cancel_button)
+
+        await self.last_interaction.followup.edit_message(message_id=self.last_message_id, embed=self.embed("submit"),
+                                                          view=self)
+
+    def embed(self, action: Literal["select", "amount", "submit", "done", "canceled"] = "select") -> discord.Embed:
+        if action == "select":
+            embed = discord.Embed(
+                title="Select a bet type",
+                description="Select a bet type from the dropdown menu below.",
+                color=discord.Color.blue()
+            )
+            embed.set_footer(text="Select a bet type to continue.")
+        elif action == "amount":
+            embed = discord.Embed(
+                title="Enter your bet amount",
+                description="Enter your bet amount in the modal below.",
+                color=discord.Color.blue()
+            )
+            embed.add_field(name="Bet Type", value=self.values["bet_type"], inline=True)
+            embed.set_footer(text="Enter your bet amount to continue.")
+        elif action == "submit":
+            embed = discord.Embed(
+                title="Submit your bet",
+                description="Click the button below to submit your bet.",
+                color=discord.Color.blue()
+            )
+            embed.add_field(name="Bet Type", value=self.values["bet_type"], inline=True)
+            embed.add_field(name="Bet Amount", value=self.values["bet_amount"], inline=True)
+            embed.set_footer(text="Click 'Submit' to continue. Click cancel to cancel your bet.")
+        elif action == "done":
+            embed = discord.Embed(
+                title="Bet Submitted",
+                description="Your bet has been submitted.",
+                color=discord.Color.green()
+            )
+        elif action == "canceled":
+            embed = discord.Embed(
+                title="Bet Canceled",
+                description="Your bet has been canceled.",
+                color=discord.Color.red()
+            )
+
+        else:
+            embed = discord.Embed(
+                title="How the hell did you do this? Action is a literal with specific handled values!",
+                description="This is a bug, please report it to the developer.",
+                color=discord.Color.red()
+            )
+
+        return embed
+
+    async def _submit_callback(self, interaction: discord.Interaction):
+        # Add the player to the game
+        player = Player(interaction.user, int(self.values["bet_amount"]), self.values["bet_type"])
+        self.roulette_instance.players.append(player)
+
+        # Update the original message
+        await self.roulette_instance._update_message("queue")
+
+        # Update the current view
+        self.clear_items()
+        await interaction.response.edit_message(embed=self.embed("done"), view=self)
+
+    async def _cancel_callback(self, interaction: discord.Interaction):
+        self.clear_items()
+        await interaction.response.edit_message(embed=self.embed("canceled"), view=self)
+
+
+class BetAmountModal(discord.ui.Modal):
+    def __init__(self, callback, values: dict[str, str]):
+        super().__init__(title="Enter Bet Amount")
+        self.amount = discord.ui.TextInput(label="Bet Amount", placeholder="Bet Amount as a number", required=True)
+        self.add_item(self.amount)
+
+        self.submit_callback = callback
+
+        self.values = values
+
+    async def on_submit(self, interaction: discord.Interaction):
+        try:
+            bet_amount = int(self.amount.value)
+            if bet_amount <= 0:
+                await interaction.response.send_message("Bet amount must be greater than 0.", ephemeral=True)
+                return
+        except ValueError:
+            await interaction.response.send_message("Bet amount must be a number.", ephemeral=True)
+            return
+
+        await interaction.response.defer()
+
+        self.values["bet_amount"] = str(bet_amount)
+        await self.submit_callback()
+
+
+class Roulette:
+    """
+    When command run:
+    initialize game with settings (timeout, min players, etc.)
+    send embed letting users know a game started
+    
+    when join button is pressed:
+        check if user has sufficient balance
+        send ephemeral embed with bet options (number, color, ranges, etc.)
+        when bet type selected:
+            prompt for bet amount
+            when bet amount confirmed:
+                validate bet is valid and user has sufficient balance
+                add user to game with their bet details
+                send confirmation to user
+                update original embed with current players
+    
+    when game timer runs out OR when start button pressed by host:
+        if minimum_players_reached:
+            roll a random color and number (accounting for 0/00)
+            calculate results for each bet type
+            
+            for each player:
+                check if their bet wins according to roulette rules
+                calculate payout based on bet type
+                update their balance
+                add them to appropriate result category
+            
+            send final embed with:
+                - The result (number and color)
+                - Winners and their winnings
+                - Losers and their losses
+        else:
+            cancel game
+            return bets to players
+            send cancellation message
+    """
+
+    def __init__(self, host: discord.User, hosts_bet: int, hosts_bet_type: Literal["black"],
+                 users_dict: dict[int, int]):
+        self.users_dict = users_dict
+        self.host = Player(host, hosts_bet, hosts_bet_type)
+        self.game_over = False
+        self.message: discord.Message
+        self.players: List[Player] = [self.host]
+
+        self.view = discord.ui.View(timeout=180)
+        self.view.on_timeout = self._on_timeout
+
+        start_button = discord.ui.Button(label="Start", style=discord.ButtonStyle.success)
+        start_button.callback = self._start_callback
+        self.view.add_item(start_button)
+
+        join_button = discord.ui.Button(label="Join", style=discord.ButtonStyle.primary)
+        join_button.callback = self._join_callback
+        self.view.add_item(join_button)
+
+        cancel_button = discord.ui.Button(label="Cancel", style=discord.ButtonStyle.danger)
+        cancel_button.callback = self._cancel_callback
+        self.view.add_item(cancel_button)
+
+    async def run(self, interaction: discord.Interaction):
+        await interaction.response.send_message(embed=self._get_embed("queue"), view=self.view)
+        # Store the message after it's sent
+        self.message = await interaction.original_response()
+
+        # if self.game_over:
+        #     if hasattr(interaction, "original_response"):
+        #         self.message = await interaction.original_response()
+        #         await self._end_game()
+
+    async def _update(self):
+        pass
+
+    async def _end_game(self):
+        self.game_over = True
+        self._handle_payout()
+        await self._update_message("ended")
+
+    async def _on_timeout(self):
+        if not self.game_over:
+            self.result = "timeout"
+            await self._end_game()
+
+    def _get_embed(self, status: Literal["play", "ended", "queue"]) -> discord.Embed:
+        if status == "queue":
+            embed = discord.Embed(
+                title="Roulette",
+                description="Join the game by clicking the button below!",
+                color=discord.Color.blue()
+            )
+            for player in self.players:
+                embed.add_field(
+                    name=f"{player.user.display_name} {':crown:' if self.players.index(player) == 0 else ''}",
+                    value=f"Bet: {player.bet} on {player.bet_type}", inline=False)
+            embed.set_footer(text="Click 'Join' to participate.")
+        return embed
+
+    def _handle_payout(self):
+        pass
+
+    async def _update_message(self, action: Literal["queue", "play", "ended"], interaction=None):
+        await self.message.edit(embed=self._get_embed(action), view=self.view)
+
+    async def _join_callback(self, interaction: discord.Interaction):
+        user_balance = 1000  # TODO: use the actual users balance
+        view = RouletteJoinView(self._add_player, self)
+        await interaction.response.send_message(embed=view.embed(), view=view, ephemeral=True)
+
+    # No longer needed as we're handling this in the RouletteJoinView class
+    async def _add_player(self, user: discord.User, values: dict[str, str]):
+        player = Player(user, int(values["bet_amount"]), values["bet_type"])
+        self.players.append(player)
+
+        # Update the original message
+        await self._update_message("queue")
+
+    async def _start_callback(self, interaction: discord.Interaction):
+        pass
+
+    async def _cancel_callback(self, interaction: discord.Interaction):
+        for player in self.players:
+            if interaction.user.id == player.user.id:
+                self.players.remove(player)
+                await interaction.response.send_message("You left the game", ephemeral=True)
+                await self._update_message("queue", interaction)
+
+                break
+
+        if len(self.players) == 0:
+            self.game_over = True
+            await self._update_message("ended", interaction)
+
+
 class Card:
     def __init__(self, suit: Literal["hearts", "diamonds", "clubs", "spades"],
                  rank: Literal["2", "3", "4", "5", "6", "7", "8", "9", "10", "Jack", "Queen", "King", "Ace"]):
@@ -147,18 +447,6 @@ class Card:
         elif self.rank.lower() == "ace":
             return 11
         return int(self.rank)
-
-
-# TODO: Write Roulette
-class Roulette:
-    def __init__(self, user: discord.User, bet: int, users_dict: dict[int, int]):
-        pass
-
-    async def run(self):
-        pass
-
-    async def _update(self):
-        pass
 
 
 # TODO: Write Slots
@@ -937,13 +1225,14 @@ class AfflictionBot:
         # Create the berries group and add it to the command tree
         berries_group = app_commands.Group(name="berries", description="Berry commands")
 
-        async def gather(interaction: discord.Interaction, type: str):
+        async def gather(interaction: discord.Interaction, gather_type: Literal["hunt", "steal"]):
             old_balance = self._validate_user(interaction.user.id, interaction.guild_id)
-            outcome: GatherOutcome = self._roll_for_gathering_occurrence(interaction.guild_id, type)
+            outcome: GatherOutcome = self._roll_for_gathering_occurrence(interaction.guild_id, gather_type)
             self.balances_dict[interaction.user.id] += outcome.value
 
             await interaction.response.send_message(
-                embed=get_outcome_embed(outcome, old_balance, self.balances_dict[interaction.user.id], interaction),
+                embed=get_outcome_embed(gather_type, outcome, old_balance, self.balances_dict[interaction.user.id],
+                                        interaction),
                 ephemeral=False)
 
         @berries_group.command(name="hunt", description="Hunt for some berries")
@@ -980,13 +1269,21 @@ class AfflictionBot:
         # TODO: Add gambling commands
         @gambling_group.command(name="roulette", description="Play roulette with your berries")
         @app_commands.describe(bet="Amount of berries to bet")
+        @app_commands.choices(
+            bet_type=[
+                app_commands.Choice(name="Red", value="red"),
+                app_commands.Choice(name="Black", value="black"),
+                app_commands.Choice(name="Green", value="green")
+            ]
+        )
         # @app_commands.checks.cooldown(1, 60, key=lambda i: i.user.id)  # Uncomment to enable cooldown
-        async def roulette(interaction: discord.Interaction, bet: int):
+        async def roulette(interaction: discord.Interaction, bet: int, bet_type: str):
             if 0 > bet > self._validate_user(interaction.user.id, interaction.guild_id):
                 await interaction.response.send_message("You don't have enough berries to bet that much.",
                                                         ephemeral=True)
                 return
-            await interaction.response.send_message(":game_die: Rolling the dice...")
+            game = Roulette(interaction.user, bet, bet_type, self.balances_dict)
+            await game.run(interaction)
 
         @gambling_group.command(name="slots", description="Play slots with your berries")
         @app_commands.describe(bet="Amount of berries to bet")
@@ -1198,7 +1495,7 @@ class AfflictionBot:
 
         @self.client.event
         async def on_message(message: discord.Message):
-            favored_ones = [767047725333086209]
+            favored_ones = [767047725333086209, 953401260306989118, 757757494192767017]
 
             if message.author == self.client.user:
                 return
