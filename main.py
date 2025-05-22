@@ -148,6 +148,25 @@ class Player:
         self.user: discord.User = user
         self.bet: int = bet
         self.bet_type: str = bet_type
+        self.payout: int = 0
+
+    def calculate_payout(self):
+        """
+        Calculate the payout based on the bet type.
+        The payout is calculated as follows:
+        - Straight Up: 35:1
+        - Split: 17:1
+        - Street: 11:1
+        - Corner: 8:1
+        - Line: 5:1
+        - Red/Black, Odd/Even, High/Low, Dozens: 1:1
+        
+        Sets the payout variable to the calculated payout.
+        """
+        if self.bet_type in "red black even odd low high".split():
+            self.payout = self.bet * 2
+        elif self.bet_type in "dozen1 dozen2 dozen3".split():
+            self.payout = self.bet * 3
 
 
 """
@@ -354,6 +373,10 @@ class Roulette:
         self.message: discord.Message
         self.players: List[Player] = [self.host]
         self.min_bet = min_bet
+        self.rolled_color = ""
+        self.rolled_number = 0
+
+        self.countdown = 60  # Game Start countdown in seconds
 
         self.view = discord.ui.View(timeout=180)
         self.view.on_timeout = self._on_timeout
@@ -376,13 +399,37 @@ class Roulette:
         # Store the message after it's sent
         self.message = await interaction.original_response()
 
-        # if self.game_over:
-        #     if hasattr(interaction, "original_response"):
-        #         self.message = await interaction.original_response()
-        #         await self._end_game()
+        while self.countdown > 0:
+            # If the game is over we don't want to do anything
+            if self.game_over:
+                return
 
-    async def _update(self):
-        pass
+            if self.countdown % 5 == 0 or self.countdown < 5:
+                await self.message.edit(embed=self._get_embed("queue"), view=self.view)
+            await asyncio.sleep(1)
+            self.countdown -= 1
+
+        self.view = None
+        # Roll the values and calculate payouts!
+        self._roll_values()
+        self._handle_payout()
+
+        # Gane over, let them know who won and how much they won
+        await self.message.edit(embed=self._get_embed("finished"), view=self.view)
+
+    def _roll_values(self):
+        """
+        Rolls a random number and color for the roulette game.
+        The rolled number is between 0 and 36, inclusive.
+        The rolled color is either "red", "black", or "green".
+        """
+        self.rolled_number = random.randint(0, 36)
+        if self.rolled_number == 0:
+            self.rolled_color = "green"
+        elif self.rolled_number % 2 == 0:
+            self.rolled_color = "red"
+        else:
+            self.rolled_color = "black"
 
     async def _cancel_game(self):
         self.game_over = True
@@ -398,7 +445,7 @@ class Roulette:
         if status == "queue":
             embed = discord.Embed(
                 title="Roulette",
-                description="Join the game by clicking the button below!",
+                description=f"Join the game by clicking the button below!\n\n-# The game starts in {self.countdown} seconds.",
                 color=discord.Color.blue()
             )
             for player in self.players:
@@ -413,6 +460,18 @@ class Roulette:
                 description="The game has been canceled",
                 color=discord.Color.red()
             )
+        elif status == "finished":
+            embed = discord.Embed(
+                title="Roulette",
+                description=f"The ball landed on :{self.rolled_color if self.rolled_color != 'black' else f'{self.rolled_color}_large'}_square: {self.rolled_number}.",
+                color=discord.Color.red() if self.rolled_color == 'red' else discord.Color.dark_grey() if self.rolled_color == 'black' else discord.Color.green()
+            )
+            winners = [player for player in self.players if player.payout > 0]
+            if winners:
+                winner_text = "\n".join([f"🎉 {player.user.display_name}: +{player.payout}" for player in winners])
+                embed.add_field(name="Winners", value=winner_text, inline=False)
+            else:
+                embed.add_field(name="Results", value="No winners this round!", inline=False)
         else:
             self.view = None
             embed = discord.Embed(
@@ -423,12 +482,41 @@ class Roulette:
         return embed
 
     def _handle_payout(self):
-        pass
+        for player in self.players:
+            if player.bet_type == self.rolled_color:
+                player.calculate_payout()
+                self.users_dict[player.user.id] += player.payout
+            elif player.bet_type == "even" and self.rolled_number % 2 == 0:
+                player.calculate_payout()
+                self.users_dict[player.user.id] += player.payout
+            elif player.bet_type == "odd" and self.rolled_number % 2 != 0:
+                player.calculate_payout()
+                self.users_dict[player.user.id] += player.payout
+            elif player.bet_type == "low" and self.rolled_number <= 18:
+                player.calculate_payout()
+                self.users_dict[player.user.id] += player.payout
+            elif player.bet_type == "high" and self.rolled_number > 18:
+                player.calculate_payout()
+                self.users_dict[player.user.id] += player.payout
+            elif player.bet_type == "dozen1" and 1 <= self.rolled_number <= 12:
+                player.calculate_payout()
+                self.users_dict[player.user.id] += player.payout
+            elif player.bet_type == "dozen2" and 13 <= self.rolled_number <= 24:
+                player.calculate_payout()
+                self.users_dict[player.user.id] += player.payout
+            elif player.bet_type == "dozen3" and 25 <= self.rolled_number <= 36:
+                player.calculate_payout()
+                self.users_dict[player.user.id] += player.payout
+            else:
+                player.payout = - player.bet
 
     async def update_message(self, action: Literal["play", "finished", "canceled", "queue"], interaction=None):
         await self.message.edit(embed=self._get_embed(action), view=self.view)
 
     async def _join_callback(self, interaction: discord.Interaction):
+        if interaction.user.id in [player.user.id for player in self.players]:
+            await interaction.response.send_message("You are already in the game!", ephemeral=True)
+            return
         view = RouletteJoinView(self)
         await interaction.response.send_message(embed=view.embed(), view=view, ephemeral=True)
 
@@ -436,6 +524,8 @@ class Roulette:
         if interaction.user.id != self.players[0].user.id:
             await interaction.response.send_message("Only host can start the game", ephemeral=True)
             return
+        self.countdown = 0
+        await interaction.response.defer()
 
     async def _cancel_callback(self, interaction: discord.Interaction):
         for player in self.players:
