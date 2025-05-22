@@ -328,68 +328,46 @@ class BetAmountModal(discord.ui.Modal):
 
 
 class Roulette:
-    """
-    When command run:
-    initialize game with settings (timeout, min players, etc.)
-    send embed letting users know a game started
-    
-    when join button is pressed:
-        check if user has sufficient balance
-        send ephemeral embed with bet options (number, color, ranges, etc.)
-        when bet type selected:
-            prompt for bet amount
-            when bet amount confirmed:
-                validate bet is valid and user has sufficient balance
-                add user to game with their bet details
-                send confirmation to user
-                update original embed with current players
-    
-    when game timer runs out OR when start button pressed by host:
-        if minimum_players_reached:
-            roll a random color and number (accounting for 0/00)
-            calculate results for each bet type
-            
-            for each player:
-                check if their bet wins according to roulette rules
-                calculate payout based on bet type
-                update their balance
-                add them to appropriate result category
-            
-            send final embed with:
-                - The result (number and color)
-                - Winners and their winnings
-                - Losers and their losses
-        else:
-            cancel game
-            return bets to players
-            send cancellation message
-    """
-
     def __init__(self, host: discord.User, hosts_bet: int, hosts_bet_type: str, bet_types: dict[str, str],
                  users_dict: dict[int, int], min_bet: int):
+        """
+        The class that is used to play roulette.
+        :param host: The user object that is the person that ran the original command
+        :param hosts_bet: The hosts bet
+        :param hosts_bet_type: The option that host bet on
+        :param bet_types: The bet types that are available to the players
+        :param users_dict: The list of users and balances in the database
+        :param min_bet: The minimum bet (Per Server)
+        """
         self.users_dict = users_dict
-        self.host = Player(host, hosts_bet, hosts_bet_type)
-        self.game_over = False
-        self.message: discord.Message
+        self.host = Player(host, hosts_bet, hosts_bet_type)  # The person that started the game
         self.players: List[Player] = [self.host]
         self.min_bet = min_bet
-        self.rolled_color = ""
-        self.rolled_number = 0
+
+        self.message: discord.Message  # the root message that all updates are sent to
+        self.bet_types: dict[str, str] = bet_types
+
+        self.rolled_color = ""  # The color that is rolled at the end of the game
+        self.rolled_number = 0  # The number that is rolled at the end of the game
+        self.game_over = False
 
         self.countdown = 60  # Game Start countdown in seconds
 
+        # Setting up the buttons for start, join, and cancel
         self.view = discord.ui.View(timeout=180)
         self.view.on_timeout = self._on_timeout
-        self.bet_types: dict[str, str] = bet_types
 
+        # The start button
         start_button = discord.ui.Button(label="Start", style=discord.ButtonStyle.success)
         start_button.callback = self._start_callback
         self.view.add_item(start_button)
 
+        # The join button
         join_button = discord.ui.Button(label="Join", style=discord.ButtonStyle.primary)
         join_button.callback = self._join_callback
         self.view.add_item(join_button)
 
+        # The cancel button
         cancel_button = discord.ui.Button(label="Cancel", style=discord.ButtonStyle.danger)
         cancel_button.callback = self._cancel_callback
         self.view.add_item(cancel_button)
@@ -399,23 +377,31 @@ class Roulette:
         # Store the message after it's sent
         self.message = await interaction.original_response()
 
+        # Wait for the countdown to finish. If the host presses start it will skip it
         while self.countdown > 0:
             # If the game is over we don't want to do anything
             if self.game_over:
                 return
 
+            # Update the displayed countdown every 5 seconds, unless it's the final 5 seceonds where we update every second
             if self.countdown % 5 == 0 or self.countdown < 5:
                 await self.message.edit(embed=self._get_embed("queue"), view=self.view)
+            # Sleeping for one second. We use asyncio.sleep instead of time.sleep to not block the event loop
             await asyncio.sleep(1)
             self.countdown -= 1
 
-        self.view = None
+        # Clear the view so that the buttons are removed
+        self.view.clear_items()
         # Roll the values and calculate payouts!
         self._roll_values()
         self._handle_payout()
 
-        # Gane over, let them know who won and how much they won
-        await self.message.edit(embed=self._get_embed("finished"), view=self.view)
+        # Set the old message the ended embed so the user knows that the game is over
+        await self.message.edit(embed=self._get_embed("ended"), view=self.view)
+        
+        # send the message containing results, mentioning the players that participated
+        await self.message.reply(content=", ".join([player.user.mention for player in self.players]),
+                                        embed=self._get_embed("finished"), view=self.view)
 
     def _roll_values(self):
         """
@@ -433,26 +419,27 @@ class Roulette:
 
     async def _cancel_game(self):
         self.game_over = True
-        self._handle_payout()
         await self.update_message("canceled")
 
     async def _on_timeout(self):
         if not self.game_over:
-            self.result = "timeout"
             await self._cancel_game()
 
-    def _get_embed(self, status: Literal["play", "finished", "canceled", "queue"]) -> discord.Embed:
+    def _get_embed(self, status: Literal["play", "finished", "canceled", "queue", "ended"]) -> discord.Embed:
+        # Queue Embed
         if status == "queue":
             embed = discord.Embed(
                 title="Roulette",
                 description=f"Join the game by clicking the button below!\n\n-# The game starts in {self.countdown} seconds.",
                 color=discord.Color.blue()
             )
+            # List players participating
             for player in self.players:
                 embed.add_field(
                     name=f"{player.user.display_name} {':crown:' if self.players.index(player) == 0 else ''}",
                     value=f"Bet: {player.bet} on {self.bet_types[player.bet_type]}", inline=False)
             embed.set_footer(text="Click 'Join' to participate.")
+        # Canceled Embed
         elif status == "canceled":
             self.view = None
             embed = discord.Embed(
@@ -460,18 +447,27 @@ class Roulette:
                 description="The game has been canceled",
                 color=discord.Color.red()
             )
+        # Finished Embed
         elif status == "finished":
             embed = discord.Embed(
                 title="Roulette",
                 description=f"The ball landed on :{self.rolled_color if self.rolled_color != 'black' else f'{self.rolled_color}_large'}_square: {self.rolled_number}.",
-                color=discord.Color.red() if self.rolled_color == 'red' else discord.Color.dark_grey() if self.rolled_color == 'black' else discord.Color.green()
+                color=discord.Color.red() if self.rolled_color == 'red' else discord.Color.greyple() if self.rolled_color == 'black' else discord.Color.green()
             )
+            # Display the users if there are any
             winners = [player for player in self.players if player.payout > 0]
             if winners:
-                winner_text = "\n".join([f"🎉 {player.user.display_name}: +{player.payout}" for player in winners])
+                winner_text = "\n".join([f"🎉 {player.user.display_name}: +{player.payout} :cherries:" for player in winners])
                 embed.add_field(name="Winners", value=winner_text, inline=False)
             else:
                 embed.add_field(name="Results", value="No winners this round!", inline=False)
+        # Ended embed. Just a small one to let them know to look at the message
+        elif status == "ended":
+            embed = discord.Embed(
+                title="Roulette (Game Ended)",
+                description=f"The game has ended. Check post with your name mentioned to see the results!",
+                color=discord.Color.greyple()
+            )
         else:
             self.view = None
             embed = discord.Embed(
@@ -482,31 +478,41 @@ class Roulette:
         return embed
 
     def _handle_payout(self):
+        # Looping through every player
         for player in self.players:
+            # if they bet the color
             if player.bet_type == self.rolled_color:
                 player.calculate_payout()
                 self.users_dict[player.user.id] += player.payout
+            # If they bet even and it was even
             elif player.bet_type == "even" and self.rolled_number % 2 == 0:
                 player.calculate_payout()
                 self.users_dict[player.user.id] += player.payout
+            # If they bet odd and it was odd
             elif player.bet_type == "odd" and self.rolled_number % 2 != 0:
                 player.calculate_payout()
                 self.users_dict[player.user.id] += player.payout
+            # If they bet low, and it was in the low range (lower than 19)
             elif player.bet_type == "low" and self.rolled_number <= 18:
                 player.calculate_payout()
                 self.users_dict[player.user.id] += player.payout
+            # If they bet high, and it was in the high range (higher than 18)
             elif player.bet_type == "high" and self.rolled_number > 18:
                 player.calculate_payout()
                 self.users_dict[player.user.id] += player.payout
+            # If they bet dozen1, and it was in the first dozen (1-12)
             elif player.bet_type == "dozen1" and 1 <= self.rolled_number <= 12:
                 player.calculate_payout()
                 self.users_dict[player.user.id] += player.payout
+            # If they bet dozen2, and it was in the second dozen (13-24)
             elif player.bet_type == "dozen2" and 13 <= self.rolled_number <= 24:
                 player.calculate_payout()
                 self.users_dict[player.user.id] += player.payout
+            # If they bet dozen3, and it was in the third dozen (25-36)
             elif player.bet_type == "dozen3" and 25 <= self.rolled_number <= 36:
                 player.calculate_payout()
                 self.users_dict[player.user.id] += player.payout
+            # If their bet was not right, set their payout to a negative value. Unused if negative, but may be used later if I want to
             else:
                 player.payout = - player.bet
 
@@ -525,6 +531,7 @@ class Roulette:
             await interaction.response.send_message("Only host can start the game", ephemeral=True)
             return
         self.countdown = 0
+        # Defer is basically like saying, we got it but we dont need to send anything
         await interaction.response.defer()
 
     async def _cancel_callback(self, interaction: discord.Interaction):
@@ -1380,6 +1387,23 @@ class AfflictionBot:
             )
 
             await interaction.response.send_message(embed=embed, ephemeral=False)
+            
+        @berries_group.command(name="set", description="Set the balance of a user")
+        @app_commands.describe(user="User to edit balance", new_balance="New balance")
+        @app_commands.checks.has_permissions(administrator=True)
+        async def add_berries(interaction: discord.Interaction, user: discord.Member, new_balance: int):
+            # Check if the user is in the guild
+            if user.id not in self.balances_dict:
+                await interaction.response.send_message(f"User {user.name} is not in the guild.", ephemeral=True)
+                return
+
+            # Add berries to the user's balance
+            self.balances_dict[user.id] = new_balance
+
+            # Save the updated balances
+            self._save_json(0, "balances", self.balances_dict)
+
+            await interaction.response.send_message(f"Added {new_balance} berries to {user.name}'s balance.", ephemeral=True)
 
         # Add gambling commands to the berries group
         berries_group.add_command(self._register_gambling_commands())
@@ -1399,10 +1423,15 @@ class AfflictionBot:
         )
         # @app_commands.checks.cooldown(1, 60, key=lambda i: i.user.id)  # Uncomment to enable cooldown
         async def roulette(interaction: discord.Interaction, bet: int, bet_type: str):
-            if 0 > bet > self._validate_user(interaction.user.id, interaction.guild_id):
-                await interaction.response.send_message("You don't have enough berries to bet that much.",
-                                                        ephemeral=True)
+            if bet > self._validate_user(interaction.user.id, interaction.guild_id):
+                await interaction.response.send_message(
+                    f"You don't have enough berries to bet that much.\n-# Your balance: {self._validate_user(interaction.user.id, interaction.guild_id)}.",
+                    ephemeral=True)
                 return
+            if self.guild_configs[interaction.guild_id].minimum_bet > bet:
+                await interaction.response.send_message(
+                    f"You bet *{bet}*, but the minimum bet is **{self.guild_configs[interaction.guild_id].minimum_bet}**.")
+                return 
 
             self.balances_dict[interaction.user.id] -= bet
 
@@ -1414,9 +1443,14 @@ class AfflictionBot:
         @app_commands.describe(bet="Amount of berries to bet")
         # @app_commands.checks.cooldown(1, 60, key=lambda i: i.user.id)  # Uncomment to enable cooldown
         async def slots(interaction: discord.Interaction, bet: int):
-            if 0 > bet > self._validate_user(interaction.user.id, interaction.guild_id):
-                await interaction.response.send_message("You don't have enough berries to bet that much.",
-                                                        ephemeral=True)
+            if bet > self._validate_user(interaction.user.id, interaction.guild_id):
+                await interaction.response.send_message(
+                    f"You don't have enough berries to bet that much.\n-# Your balance: {self._validate_user(interaction.user.id, interaction.guild_id)}.",
+                    ephemeral=True)
+                return
+            if self.guild_configs[interaction.guild_id].minimum_bet > bet:
+                await interaction.response.send_message(
+                    f"You bet *{bet}*, but the minimum bet is **{self.guild_configs[interaction.guild_id].minimum_bet}**.")
                 return
             await interaction.response.send_message(":slot_machine: Spinning slot machine...")
 
@@ -1433,6 +1467,7 @@ class AfflictionBot:
             if self.guild_configs[interaction.guild_id].minimum_bet > bet:
                 await interaction.response.send_message(
                     f"You bet *{bet}*, but the minimum bet is **{self.guild_configs[interaction.guild_id].minimum_bet}**.")
+                return
 
             self.balances_dict[interaction.user.id] -= bet
             game = Blackjack(interaction.user, bet, self.balances_dict)
