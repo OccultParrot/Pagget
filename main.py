@@ -310,7 +310,7 @@ class AfflictionBot:
         # Commands for everyone
         @self.tree.command(name="roll-affliction", description="Rolls for standard afflictions affecting your dinosaur")
         @app_commands.describe(dino="Your dinosaur's name")
-        @app_commands.checks.cooldown(1, 60, key=lambda i: i.user.id)  # Uncomment to enable cooldown
+        @app_commands.checks.cooldown(1, 120, key=lambda i: i.user.id)  # Uncomment to enable cooldown
         async def roll_affliction(interaction: discord.Interaction, dino: str):
             try:
                 afflictions: List[Affliction] = self._roll_for_afflictions(interaction.guild_id, is_minor=False)
@@ -343,7 +343,7 @@ class AfflictionBot:
         @self.tree.command(name="roll-minor-affliction",
                            description="Rolls for minor afflictions affecting your dinosaur")
         @app_commands.describe(dino="Your dinosaur's name")
-        @app_commands.checks.cooldown(1, 60, key=lambda i: i.user.id)  # Uncomment to enable cooldown
+        @app_commands.checks.cooldown(1, 120, key=lambda i: i.user.id)  # Uncomment to enable cooldown
         async def roll_minor_affliction(interaction: discord.Interaction, dino: str):
             try:
                 afflictions: List[Affliction] = self._roll_for_afflictions(interaction.guild_id, is_minor=True)
