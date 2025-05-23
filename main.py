@@ -1,12 +1,7 @@
 """
 TODO:
-GAMBLING!!!
-
-write roulette, slots
-stress test blackjack
-
-make blackjack able to be wo
-
+Stress test all the commands
+Write changelog
 """
 import asyncio
 import atexit
@@ -380,7 +375,7 @@ class Roulette:
             if self.game_over:
                 return
 
-            # Update the displayed countdown every 5 seconds, unless it's the final 5 seceonds where we update every second
+            # Update the displayed countdown every 5 seconds, unless it's the final 5 seconds where we update every second
             if self.countdown % 5 == 0 or self.countdown < 5:
                 await self.message.edit(embed=self._get_embed("queue"), view=self.view)
             # Sleeping for one second. We use asyncio.sleep instead of time.sleep to not block the event loop
@@ -532,7 +527,7 @@ class Roulette:
             await interaction.response.send_message("Only host can start the game", ephemeral=True)
             return
         self.countdown = 0
-        # Defer is basically like saying, we got it but we dont need to send anything
+        # Defer is basically like saying, we got it but, we don't need to send anything
         await interaction.response.defer()
 
     async def _cancel_callback(self, interaction: discord.Interaction):
@@ -589,6 +584,7 @@ class Slots:
         self.view = SlotsView(self._spin_callback)
 
     async def run(self, interaction):
+        self._spin()
         await interaction.response.send_message(embed=self._get_embed(), view=self.view)
         self.message: discord.Message = await interaction.original_response()
 
@@ -599,6 +595,7 @@ class Slots:
 
         if self.users_dict[self.user.id] < self.minimum_bet:
             await interaction.response.send_message("Huh, looks like your all out of money.", ephemeral=True)
+            return
         self._spin()
 
         await self.message.edit(embed=self._get_embed(), view=self.view)
@@ -1460,6 +1457,8 @@ class AfflictionBot:
 
         # Add the berry commands to the command tree
         self.tree.add_command(self._register_berry_commands())
+        
+        # @self.tree.add_command(name="help")
 
     def _register_berry_commands(self) -> app_commands.Group:
         """Register berry-related commands as a command group."""
@@ -1478,16 +1477,17 @@ class AfflictionBot:
                 ephemeral=False)
 
         @berries_group.command(name="hunt", description="Hunt for some berries")
-        # @app_commands.checks.cooldown(1, 60, key=lambda i: i.user.id)  # Uncomment to enable cooldown
+        @app_commands.checks.cooldown(1, 43200, key=lambda i: i.user.id)  # Uncomment to enable cooldown
         async def hunt(interaction: discord.Interaction):
             await gather(interaction, "hunt")
 
-        @berries_group.command(name="steal", description="Steal berries from another parasaur")
-        # @app_commands.checks.cooldown(1, 60, key=lambda i: i.user.id)  # Uncomment to enable cooldown
+        @berries_group.command(name="steal", description="Attempt to steal berries from the herd")
+        @app_commands.checks.cooldown(1, 43200, key=lambda i: i.user.id)  # Uncomment to enable cooldown
         async def steal(interaction: discord.Interaction):
             await gather(interaction, "steal")
 
         @berries_group.command(name="balance", description="Check your berry balance")
+        @app_commands.checks.cooldown(5, 120, key=lambda i: i.user.id)  # Uncomment to enable cooldown
         async def balance(interaction: discord.Interaction):
             # Retrieve user's current balance
             current_balance = self._validate_user(interaction.user.id, interaction.guild_id)
@@ -1503,7 +1503,7 @@ class AfflictionBot:
         @berries_group.command(name="set", description="Set the balance of a user")
         @app_commands.describe(user="User to edit balance", new_balance="New balance")
         @app_commands.checks.has_permissions(administrator=True)
-        async def add_berries(interaction: discord.Interaction, user: discord.Member, new_balance: int):
+        async def set_berries(interaction: discord.Interaction, user: discord.Member, new_balance: int):
             # Check if the user is in the guild
             if user.id not in self.balances_dict:
                 await interaction.response.send_message(f"User {user.name} is not in the guild.", ephemeral=True)
@@ -1518,6 +1518,22 @@ class AfflictionBot:
             await interaction.response.send_message(f"Added {new_balance} berries to {user.name}'s balance.",
                                                     ephemeral=True)
 
+        @hunt.error
+        async def set_configs_error(interaction: discord.Interaction, error: app_commands.AppCommandError):
+            await read_error([interaction], error, self.logger)
+
+        @steal.error
+        async def set_configs_error(interaction: discord.Interaction, error: app_commands.AppCommandError):
+            await read_error([interaction], error, self.logger)
+
+        @balance.error
+        async def set_configs_error(interaction: discord.Interaction, error: app_commands.AppCommandError):
+            await read_error([interaction], error, self.logger)
+
+        @set_berries.error
+        async def set_configs_error(interaction: discord.Interaction, error: app_commands.AppCommandError):
+            await read_error([interaction], error, self.logger)
+
         # Add gambling commands to the berries group
         berries_group.add_command(self._register_gambling_commands())
 
@@ -1526,7 +1542,6 @@ class AfflictionBot:
     def _register_gambling_commands(self) -> app_commands.Group:
         gambling_group = app_commands.Group(name="gambling", description="Gambling commands")
 
-        # TODO: Add gambling commands
         @gambling_group.command(name="roulette", description="Play roulette with your berries")
         @app_commands.describe(bet="Amount of berries to bet")
         @app_commands.choices(
@@ -1534,7 +1549,7 @@ class AfflictionBot:
                 app_commands.Choice(name=name, value=value) for value, name in self.roulette_bet_types.items()
             ]
         )
-        # @app_commands.checks.cooldown(1, 60, key=lambda i: i.user.id)  # Uncomment to enable cooldown
+        @app_commands.checks.cooldown(1, 60, key=lambda i: i.user.id)  # Uncomment to enable cooldown
         async def roulette(interaction: discord.Interaction, bet: int, bet_type: str):
             if bet > self._validate_user(interaction.user.id, interaction.guild_id):
                 await interaction.response.send_message(
@@ -1555,7 +1570,7 @@ class AfflictionBot:
 
         @gambling_group.command(name="slots", description="Play slots with your berries")
         @app_commands.describe(bet="Amount of berries to bet")
-        # @app_commands.checks.cooldown(1, 60, key=lambda i: i.user.id)  # Uncomment to enable cooldown
+        @app_commands.checks.cooldown(1, 60, key=lambda i: i.user.id)  # Uncomment to enable cooldown
         async def slots(interaction: discord.Interaction, bet: int):
             if bet > self._validate_user(interaction.user.id, interaction.guild_id):
                 await interaction.response.send_message(
@@ -1567,15 +1582,13 @@ class AfflictionBot:
                     f"You bet *{bet}*, but the minimum bet is **{self.guild_configs[interaction.guild_id].minimum_bet}**.")
                 return
 
-            self.balances_dict[interaction.user.id] -= bet
-
             game = Slots(interaction.user, bet, self.balances_dict,
                          self.guild_configs[interaction.guild_id].minimum_bet)
             await game.run(interaction)
 
         @gambling_group.command(name="blackjack", description="Play blackjack with your berries")
         @app_commands.describe(bet="Amount of berries to bet")
-        # @app_commands.checks.cooldown(1, 60, key=lambda i: i.user.id)  # Uncomment to enable cooldown
+        @app_commands.checks.cooldown(1, 60, key=lambda i: i.user.id)  # Uncomment to enable cooldown
         async def blackjack(interaction: discord.Interaction, bet: int):
             # If the minimum bet is greater than the bet, or the bet is greater than the user's balance, return an error
             if bet > self._validate_user(interaction.user.id, interaction.guild_id):
@@ -1592,6 +1605,18 @@ class AfflictionBot:
 
             game = Blackjack(interaction.user, bet, self.balances_dict)
             await game.run(interaction)
+
+        @roulette.error
+        async def set_configs_error(interaction: discord.Interaction, error: app_commands.AppCommandError):
+            await read_error([interaction], error, self.logger)
+
+        @slots.error
+        async def set_configs_error(interaction: discord.Interaction, error: app_commands.AppCommandError):
+            await read_error([interaction], error, self.logger)
+
+        @blackjack.error
+        async def set_configs_error(interaction: discord.Interaction, error: app_commands.AppCommandError):
+            await read_error([interaction], error, self.logger)
 
         return gambling_group
 
@@ -2035,6 +2060,17 @@ class AfflictionBot:
                 self.console.print(f"  • Saving for guild {guild_id}")
                 self.logger.log(f"    Saving hunt outcomes for guild {guild_id}", "Bot")
                 self._save_json(guild_id, "hunt_outcomes", self.hunt_outcomes_dict[guild_id], cls=GatherOutcomeEncoder)
+
+            self.console.print("[green]Hunt outcomes saved[/]")
+            self.logger.log("Hunt outcomes saved", "Bot")
+
+        if hasattr(self, "steal_outcomes_dict") and self.steal_outcomes_dict:
+            self.console.print("\n[green]Saving steal outcomes...[/]")
+            for guild_id in self.steal_outcomes_dict:
+                self.console.print(f"  • Saving for guild {guild_id}")
+                self.logger.log(f"    Saving steal outcomes for guild {guild_id}", "Bot")
+                self._save_json(guild_id, "steal_outcomes", self.steal_outcomes_dict[guild_id],
+                                cls=GatherOutcomeEncoder)
 
             self.console.print("[green]Hunt outcomes saved[/]")
             self.logger.log("Hunt outcomes saved", "Bot")
