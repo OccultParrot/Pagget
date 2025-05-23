@@ -567,16 +567,61 @@ class Card:
         return int(self.rank)
 
 
-# TODO: Write Slots
 class Slots:
+    """
+    For slots, we need the bet, the user, and the dictionary of user balances so we can update the users balance
+    """
+    
+    message: discord.Message
+    
     def __init__(self, user: discord.User, bet: int, users_dict: dict[int, int]):
-        pass
+        self.user: discord.User = user
+        self.bet: int = bet
+        self.users_dict: dict[int, int] = users_dict
+        
+        self.slot_emoji = [
+            ":moneybag:", ":gem:", ":four_leaf_clover:", ":star:", ":slot_machine:"
+        ]
+        self.special_emoji = [
+            ":star2:"
+        ]
+        
+        self.rolled_slots: List[str] = []
+        self.view = discord.ui.View(timeout=180)
+        
+        spin_button = discord.ui.Button(label="Spin!", style=discord.ButtonStyle.green)
+        spin_button.callback = self._spin_callback
+        self.view.add_item(spin_button)
+        
 
-    async def run(self):
-        pass
+    async def run(self, interaction):
+        await interaction.response.send_message(embed=self._get_embed(), view=self.view)
+        self.message: discord.Message = await interaction.original_response()
 
-    async def _update(self):
-        pass
+    async def _spin_callback(self, interaction: discord.Interaction):
+        if interaction.user.id != self.user.id:
+            await interaction.response.send_message("Only the user that started the game can play.", ephemeral=True)
+            return
+        
+        self._spin()
+        
+        await self.message.edit(embed=self._get_embed(), view=self.view)
+        await interaction.response.defer()
+    
+
+    def _spin(self):
+        self.rolled_slots = random.choices(self.slot_emoji, k=3)
+        print(self.rolled_slots)
+    
+    def _get_embed(self) -> discord.Embed:
+        embed = discord.Embed(
+            title="Slots",
+            description="Press the button to spin the slots!",
+            color=discord.Color.blue()
+        )
+        embed.add_field(name="Results", value=" | ".join(self.rolled_slots), inline=False)
+        embed.set_footer(text="Click 'Spin!' to play.")
+        return embed
 
 
 class Blackjack:
@@ -1452,7 +1497,11 @@ class AfflictionBot:
                 await interaction.response.send_message(
                     f"You bet *{bet}*, but the minimum bet is **{self.guild_configs[interaction.guild_id].minimum_bet}**.")
                 return
-            await interaction.response.send_message(":slot_machine: Spinning slot machine...")
+            
+            self.balances_dict[interaction.user.id] -= bet
+            
+            game = Slots(interaction.user, bet, self.balances_dict)
+            await game.run(interaction)
 
         @gambling_group.command(name="blackjack", description="Play blackjack with your berries")
         @app_commands.describe(bet="Amount of berries to bet")
@@ -1470,6 +1519,7 @@ class AfflictionBot:
                 return
 
             self.balances_dict[interaction.user.id] -= bet
+            
             game = Blackjack(interaction.user, bet, self.balances_dict)
             await game.run(interaction)
 
