@@ -1499,15 +1499,38 @@ class AfflictionBot:
             )
 
             await interaction.response.send_message(embed=embed, ephemeral=False)
+            
+        @berries_group.command(name="gift", description="Gift berries to another user")
+        @app_commands.describe(user="User to gift berries to", amount="Amount of berries to gift")
+        @app_commands.checks.cooldown(5, 60, key=lambda i: i.user.id)  # Uncomment to enable cooldown
+        async def gift_berries(interaction: discord.Interaction, user: discord.Member, amount: int):
+            # Initialize user
+            self._validate_user(user.id, interaction.guild_id)
+            
+            # Check if the user has enough berries
+            if amount > self._validate_user(interaction.user.id, interaction.guild_id):
+                await interaction.response.send_message(
+                    f"You don't have enough berries to gift that much.\n-# Your balance: {self._validate_user(interaction.user.id, interaction.guild_id)}.",
+                    ephemeral=True)
+                return
+            if amount < 1:
+                await interaction.response.send_message(
+                    f"You can't gift less than 1 berry.",
+                    ephemeral=True)
+                return
+            # Deduct berries from the user's balance
+            self.balances_dict[interaction.user.id] -= amount
+            self.balances_dict[user.id] += amount
+            
+            # Let them know that berries were gifted
+            await interaction.response.send_message(f"{interaction.user.display_name} gave {user.display_name} {amount} berries!")
 
         @berries_group.command(name="set", description="Set the balance of a user")
         @app_commands.describe(user="User to edit balance", new_balance="New balance")
         @app_commands.checks.has_permissions(administrator=True)
         async def set_berries(interaction: discord.Interaction, user: discord.Member, new_balance: int):
-            # Check if the user is in the guild
-            if user.id not in self.balances_dict:
-                await interaction.response.send_message(f"User {user.name} is not in the guild.", ephemeral=True)
-                return
+            # Initialize user
+            self._validate_user(user.id, interaction.guild_id)
 
             # Add berries to the user's balance
             self.balances_dict[user.id] = new_balance
