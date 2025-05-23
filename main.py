@@ -612,7 +612,7 @@ class Slots:
         embed = discord.Embed(
             title="Slots",
             # The character we are repeating for the padding is a no break space, which discord does not cut off the start of lines
-            description=embed_description + f"\n\n{' ' * slots_padding}{" | ".join(self.rolled_slots)}",
+            description=embed_description + f"\n\n{' ' * slots_padding}{' | '.join(self.rolled_slots)}",
             color=discord.Color.blue()
         )
         embed.add_field(name="Bet Amount", value=self.bet)
