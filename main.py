@@ -1523,7 +1523,7 @@ class AfflictionBot:
             self.balances_dict[user.id] += amount
             
             # Let them know that berries were gifted
-            await interaction.response.send_message(f"{interaction.user.display_name} gave {user.display_name} {amount} berries!")
+            await interaction.response.send_message(f"{interaction.user.display_name.split('|')[0]} gave {user.display_name.split('|')[0]} {amount} berries!")
 
         @berries_group.command(name="set", description="Set the balance of a user")
         @app_commands.describe(user="User to edit balance", new_balance="New balance")
