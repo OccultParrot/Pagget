@@ -84,7 +84,7 @@ def get_outcome_embed(gather_type: Literal["hunt", "steal"], outcome: GatherOutc
     """Create a Discord embed for a hunt outcome."""
     embed = discord.Embed(
         title=f"Successful {gather_type.title()}!" if outcome.value > 0 else f"Failed {gather_type.title()}!",
-        description=outcome.description.format(target=target.mention if target else "") + f"{f'\n-# Target: {target.display_name}\n' if target else ''}",
+        description=outcome.description.format(target=target.display_name.split(' |')[0] if target else "") + f"{f'\n-# Target: {target.display_name}\n' if target else ''}",
         color=get_outcome_color(outcome.value)
     )
     embed.set_author(name=interaction.user.display_name, icon_url=interaction.user.avatar.url)
