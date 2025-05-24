@@ -1,7 +1,7 @@
 """
 TODO:
-Stress test all the commands
-Write changelog
+- Fix to low bet message from being public
+- Allow the user to bet on green in roulette
 """
 import asyncio
 import atexit
@@ -80,11 +80,11 @@ def get_affliction_embed(affliction: Affliction) -> discord.Embed:
 
 
 def get_outcome_embed(gather_type: Literal["hunt", "steal"], outcome: GatherOutcome, old_balance: int, new_balance: int,
-                      interaction: discord.Interaction) -> discord.Embed:
+                      target: Optional[discord.Member], interaction: discord.Interaction) -> discord.Embed:
     """Create a Discord embed for a hunt outcome."""
     embed = discord.Embed(
         title=f"Successful {gather_type.title()}!" if outcome.value > 0 else f"Failed {gather_type.title()}!",
-        description=outcome.description,
+        description=outcome.description.format(target=target.mention if target else "") + f"{f'\n-# Target: {target.display_name}\n' if target else ''}",
         color=get_outcome_color(outcome.value)
     )
     embed.set_author(name=interaction.user.display_name, icon_url=interaction.user.avatar.url)
@@ -158,6 +158,8 @@ class Player:
             self.payout = self.bet * 2
         elif self.bet_type in "dozen1 dozen2 dozen3".split():
             self.payout = self.bet * 3
+        elif self.bet_type == "green":
+            self.payout = self.bet * 35
 
 
 """
@@ -937,6 +939,7 @@ class AfflictionBot:
         self.roulette_bet_types: dict[str, str] = {
             "red": "Red",
             "black": "Black",
+            "green": "Green",
             "even": "Even",
             "odd": "Odd",
             "low": "1-18",
@@ -1457,7 +1460,7 @@ class AfflictionBot:
 
         # Add the berry commands to the command tree
         self.tree.add_command(self._register_berry_commands())
-        
+
         # @self.tree.add_command(name="help")
 
     def _register_berry_commands(self) -> app_commands.Group:
@@ -1466,25 +1469,26 @@ class AfflictionBot:
         # Create the berries group and add it to the command tree
         berries_group = app_commands.Group(name="berries", description="Berry commands")
 
-        async def gather(interaction: discord.Interaction, gather_type: Literal["hunt", "steal"]):
+        async def gather(interaction: discord.Interaction, gather_type: Literal["hunt", "steal"], target: Optional[discord.Member]):
             old_balance = self._validate_user(interaction.user.id, interaction.guild_id)
             outcome: GatherOutcome = self._roll_for_gathering_occurrence(interaction.guild_id, gather_type)
             self.balances_dict[interaction.user.id] += outcome.value
 
             await interaction.response.send_message(
                 embed=get_outcome_embed(gather_type, outcome, old_balance, self.balances_dict[interaction.user.id],
-                                        interaction),
+                                        target if target else None,interaction),
                 ephemeral=False)
 
         @berries_group.command(name="hunt", description="Hunt for some berries")
         @app_commands.checks.cooldown(1, 43200, key=lambda i: i.user.id)  # Uncomment to enable cooldown
         async def hunt(interaction: discord.Interaction):
-            await gather(interaction, "hunt")
+            await gather(interaction, "hunt", None)
 
         @berries_group.command(name="steal", description="Attempt to steal berries from the herd")
+        @app_commands.describe(target="User to steal from")
         @app_commands.checks.cooldown(1, 43200, key=lambda i: i.user.id)  # Uncomment to enable cooldown
-        async def steal(interaction: discord.Interaction):
-            await gather(interaction, "steal")
+        async def steal(interaction: discord.Interaction, target: discord.Member):
+            await gather(interaction, "steal", target)
 
         @berries_group.command(name="balance", description="Check your berry balance")
         @app_commands.checks.cooldown(5, 120, key=lambda i: i.user.id)  # Uncomment to enable cooldown
@@ -1499,14 +1503,14 @@ class AfflictionBot:
             )
 
             await interaction.response.send_message(embed=embed, ephemeral=False)
-            
+
         @berries_group.command(name="gift", description="Gift berries to another user")
         @app_commands.describe(user="User to gift berries to", amount="Amount of berries to gift")
         @app_commands.checks.cooldown(5, 60, key=lambda i: i.user.id)  # Uncomment to enable cooldown
         async def gift_berries(interaction: discord.Interaction, user: discord.Member, amount: int):
             # Initialize user
             self._validate_user(user.id, interaction.guild_id)
-            
+
             # Check if the user has enough berries
             if amount > self._validate_user(interaction.user.id, interaction.guild_id):
                 await interaction.response.send_message(
@@ -1521,9 +1525,10 @@ class AfflictionBot:
             # Deduct berries from the user's balance
             self.balances_dict[interaction.user.id] -= amount
             self.balances_dict[user.id] += amount
-            
+
             # Let them know that berries were gifted
-            await interaction.response.send_message(f"{interaction.user.display_name.split('|')[0]} gave {user.display_name.split('|')[0]} {amount} berries!")
+            await interaction.response.send_message(
+                f"{interaction.user.display_name.split(' |')[0]} gave {user.display_name.split(' |')[0]} {amount} berries!")
 
         @berries_group.command(name="set", description="Set the balance of a user")
         @app_commands.describe(user="User to edit balance", new_balance="New balance")
@@ -1835,7 +1840,7 @@ class AfflictionBot:
                 if "berries pls" in message.content.lower():
                     if random.random() < 0.5:
                         amount = random.randint(1, 1000)
-                        self.balances_dict[message.author.id] =+ amount
+                        self.balances_dict[message.author.id] = + amount
                         await message.channel.send(f"Ok poor boy, I'll give you *{amount}* berries")
                     else:
                         await message.channel.send(f"Bro, stop being such a whiner. Just work :skull:")
