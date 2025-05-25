@@ -1,7 +1,6 @@
 """
 TODO:
 - Fix to low bet message from being public
-- Allow the user to bet on green in roulette
 """
 import asyncio
 import atexit
@@ -84,7 +83,8 @@ def get_outcome_embed(gather_type: Literal["hunt", "steal"], outcome: GatherOutc
     """Create a Discord embed for a hunt outcome."""
     embed = discord.Embed(
         title=f"Successful {gather_type.title()}!" if outcome.value > 0 else f"Failed {gather_type.title()}!",
-        description=outcome.description.format(target=target.display_name.split(' |')[0] if target else "") + f"{f'\n-# Target: {target.display_name}\n' if target else ''}",
+        description=outcome.description.format(target=target.display_name.split(' |')[
+            0] if target else "") + f"{f'\n-# Target: {target.display_name}\n' if target else ''}",
         color=get_outcome_color(outcome.value)
     )
     embed.set_author(name=interaction.user.display_name, icon_url=interaction.user.avatar.url)
@@ -1469,14 +1469,15 @@ class AfflictionBot:
         # Create the berries group and add it to the command tree
         berries_group = app_commands.Group(name="berries", description="Berry commands")
 
-        async def gather(interaction: discord.Interaction, gather_type: Literal["hunt", "steal"], target: Optional[discord.Member]):
+        async def gather(interaction: discord.Interaction, gather_type: Literal["hunt", "steal"],
+                         target: Optional[discord.Member]):
             old_balance = self._validate_user(interaction.user.id, interaction.guild_id)
             outcome: GatherOutcome = self._roll_for_gathering_occurrence(interaction.guild_id, gather_type)
             self.balances_dict[interaction.user.id] += outcome.value
 
             await interaction.response.send_message(
                 embed=get_outcome_embed(gather_type, outcome, old_balance, self.balances_dict[interaction.user.id],
-                                        target if target else None,interaction),
+                                        target if target else None, interaction),
                 ephemeral=False)
 
         @berries_group.command(name="hunt", description="Hunt for some berries")
@@ -1607,7 +1608,8 @@ class AfflictionBot:
                 return
             if self.guild_configs[interaction.guild_id].minimum_bet > bet:
                 await interaction.response.send_message(
-                    f"You bet *{bet}*, but the minimum bet is **{self.guild_configs[interaction.guild_id].minimum_bet}**.")
+                    f"You bet *{bet}*, but the minimum bet is **{self.guild_configs[interaction.guild_id].minimum_bet}**.",
+                    ephemeral=True)
                 return
 
             game = Slots(interaction.user, bet, self.balances_dict,
@@ -1626,7 +1628,8 @@ class AfflictionBot:
                 return
             if self.guild_configs[interaction.guild_id].minimum_bet > bet:
                 await interaction.response.send_message(
-                    f"You bet *{bet}*, but the minimum bet is **{self.guild_configs[interaction.guild_id].minimum_bet}**.")
+                    f"You bet *{bet}*, but the minimum bet is **{self.guild_configs[interaction.guild_id].minimum_bet}**.",
+                    ephemeral=True)
                 return
 
             self.balances_dict[interaction.user.id] -= bet
@@ -1715,6 +1718,8 @@ class AfflictionBot:
                 self.console.print("[yellow]Warning: Avoid syncing commands too often to avoid rate limits...[/]")
                 self.console.print("[yellow]Warning: Syncing commands may take a while...[/]")
                 try:
+                    # Clear all commands and sync globally
+                    self.tree.clear_commands(guild=None, type=None)
                     await self.tree.sync()
                     self.console.print("[green]Command tree synced globally[/]")
                     self.logger.log("Command tree synced globally", "Bot")
