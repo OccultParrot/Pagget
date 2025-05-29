@@ -950,7 +950,7 @@ class AfflictionBot:
         }
 
         # Configure Discord client
-        intents = discord.Intents(messages=True, guilds=True)
+        intents = discord.Intents(messages=True, guilds=True, members=True)
         intents.message_content = True
         self.client = discord.Client(intents=intents)
         self.tree = app_commands.CommandTree(self.client)
@@ -1839,16 +1839,78 @@ class AfflictionBot:
                 return
 
             # Handle messages here if needed
+            if (any(mention.id == self.client.user.id for mention in message.mentions) and
+                    message.content.startswith("-#")):
+                await message.channel.send("-# What was that? I couldn't hear you.")
 
             # Only listen to the favored ones 😇
             if message.author.id in favored_ones:
+                split_message = message.content.split(" ")
                 if "berries pls" in message.content.lower():
                     if random.random() < 0.5:
                         amount = random.randint(1, 1000)
-                        self.balances_dict[message.author.id] = + amount
+                        self.balances_dict[message.author.id] =+ amount
                         await message.channel.send(f"Ok poor boy, I'll give you *{amount}* berries")
                     else:
                         await message.channel.send(f"Bro, stop being such a whiner. Just work :skull:")
+                
+                for index, word in enumerate(split_message):
+                    print(index, ":", word)
+                    if (word == "bless" and
+                            index + 2 < len(split_message) and
+                            split_message[index + 1].strip() and
+                            split_message[index + 2] == "with"):
+                        
+                        blessed_one: int = 0
+                        
+                        try:
+                            # Striping the users id out of the mention
+                            blessed_one = int(split_message[index + 1].translate(str.maketrans('', '', '<>@!')))
+                            if blessed_one == message.author.id:
+                                await message.channel.send(f"What on earth are you trying to do? Blessing your self?? smh")
+                                break
+                            if blessed_one == self.client.user.id:
+                                await message.channel.send("I really love that you are trying to bless me, it really is nice... but I dont need them.")
+                                break
+
+                        except ValueError:
+                            print("Invalid mention")
+                            break
+                        
+                        if self._get_user_from_id(blessed_one, message.guild) is None:
+                            print("Mentioned non existent user.")
+
+                        blessing = split_message[index + 3]
+                        
+                        try:
+                            blessing = int(blessing)
+                            
+                            blessing_messages = [
+                                "{name}, I bless you with {blessing} berries... and stuff :/",
+                                "-# psst {name} I am giving you {blessing} out of the goodness of my heart, they dont really control me :wink:",
+                                "The skies open above {name} and rains berries. {name} picks up {blessing}.",
+                                "Hey {name}, catch!\n-# {blessing} berries fly towards {name}"
+                            ]
+                            
+                            self._validate_user(blessed_one, message.guild.id)
+                            self.balances_dict[blessed_one] += blessing
+                            
+                            await message.channel.send(random.choice(blessing_messages).format(name= self._get_user_from_id(blessed_one, message.guild).display_name, blessing=blessing))
+                        except ValueError:
+                            await message.channel.send(f"{self._get_user_from_id(blessed_one, message.guild).display_name}, I bless you with {blessing}")
+                            
+    @staticmethod    
+    def _mention_from_id(user_id: int):
+        return f"<@{user_id}>"
+    
+    @staticmethod
+    def _get_user_from_id(user_id: int, guild: discord.Guild) -> Optional[discord.Member]:
+        for member in guild.members:
+            print(member.display_name, ":", member.id)
+            if member.id == user_id:
+                return member
+                
+        return None
 
     def _print_command_item_recursive(self, command_item, base_indent_str, parent_group_path_parts_for_log):
         """
