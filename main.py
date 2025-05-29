@@ -1895,13 +1895,13 @@ class AfflictionBot:
                             self._validate_user(blessed_one, message.guild.id)
                             self.balances_dict[blessed_one] += blessing
                             
-                            await message.channel.send(random.choice(blessing_messages).format(name= self._get_user_from_id(blessed_one, message.guild).display_name, blessing=blessing))
+                            await message.channel.send(random.choice(blessing_messages).format(name= self._name_from_user(self._get_user_from_id(blessed_one, message.guild)), blessing=blessing))
                         except ValueError:
-                            await message.channel.send(f"{self._get_user_from_id(blessed_one, message.guild).display_name}, I bless you with {blessing}")
+                            await message.channel.send(f"{self._name_from_user(self._get_user_from_id(blessed_one, message.guild))}, I bless you with {blessing}")
                             
     @staticmethod    
-    def _mention_from_id(user_id: int):
-        return f"<@{user_id}>"
+    def _name_from_user(user: discord.User | discord.Member) -> str:
+        return user.display_name.split(" |")[0]
     
     @staticmethod
     def _get_user_from_id(user_id: int, guild: discord.Guild) -> Optional[discord.Member]:
