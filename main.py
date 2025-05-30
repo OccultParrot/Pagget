@@ -81,10 +81,11 @@ def get_affliction_embed(affliction: Affliction) -> discord.Embed:
 def get_outcome_embed(gather_type: Literal["hunt", "steal"], outcome: GatherOutcome, old_balance: int, new_balance: int,
                       target: Optional[discord.Member], interaction: discord.Interaction) -> discord.Embed:
     """Create a Discord embed for a hunt outcome."""
+    
     embed = discord.Embed(
         title=f"Successful {gather_type.title()}!" if outcome.value > 0 else f"Failed {gather_type.title()}!",
         description=outcome.description.format(target=target.display_name.split(' |')[
-            0] if target else "") + f"{f'\n-# Target: {target.display_name}\n' if target else ''}",
+            0] if target else "", value=outcome.value) + f"{f'\n-# Target: {target.display_name}\n' if target else ''}",
         color=get_outcome_color(outcome.value)
     )
     embed.set_author(name=interaction.user.display_name, icon_url=interaction.user.avatar.url)
@@ -1473,7 +1474,33 @@ class AfflictionBot:
                          target: Optional[discord.Member]):
             old_balance = self._validate_user(interaction.user.id, interaction.guild_id)
             outcome: GatherOutcome = self._roll_for_gathering_occurrence(interaction.guild_id, gather_type)
+
+            # If we steal, we need to remove the berries from the target's balance, but cant put them in negatives
+            if gather_type == "steal" and target:
+                target_balance = self._validate_user(target.id, interaction.guild_id)
+                if target_balance <= 0:
+                    await interaction.response.send_message(
+                        f"{target.display_name} has no berries to steal from.",
+                        ephemeral=True)
+                    return
+                
+                # Calculate how much we can actually steal (don't go below 0)
+                if outcome.value >= 0:
+                    actual_steal_amount = min(outcome.value, target_balance)
+                else:
+                    actual_steal_amount = outcome.value
+                target_new_balance = target_balance - actual_steal_amount
+                
+                print(f"Target balance: {target_balance}, Attempted steal: {outcome.value}, Actual steal: {actual_steal_amount}")
+                print(f"Target new balance: {target_new_balance}")
+                
+                # Update the outcome value to reflect what was actually stolen
+                outcome.value = actual_steal_amount
+                
+                self.balances_dict[target.id] = target_new_balance
+                
             self.balances_dict[interaction.user.id] += outcome.value
+            
 
             await interaction.response.send_message(
                 embed=get_outcome_embed(gather_type, outcome, old_balance, self.balances_dict[interaction.user.id],
@@ -1481,18 +1508,18 @@ class AfflictionBot:
                 ephemeral=False)
 
         @berries_group.command(name="hunt", description="Hunt for some berries")
-        @app_commands.checks.cooldown(1, 43200, key=lambda i: i.user.id)  # Uncomment to enable cooldown
+        # @app_commands.checks.cooldown(1, 43200, key=lambda i: i.user.id)  # Uncomment to enable cooldown
         async def hunt(interaction: discord.Interaction):
             await gather(interaction, "hunt", None)
 
         @berries_group.command(name="steal", description="Attempt to steal berries from the herd")
         @app_commands.describe(target="User to steal from")
-        @app_commands.checks.cooldown(1, 43200, key=lambda i: i.user.id)  # Uncomment to enable cooldown
+        # @app_commands.checks.cooldown(1, 43200, key=lambda i: i.user.id)  # Uncomment to enable cooldown
         async def steal(interaction: discord.Interaction, target: discord.Member):
             await gather(interaction, "steal", target)
 
         @berries_group.command(name="balance", description="Check your berry balance")
-        @app_commands.checks.cooldown(5, 120, key=lambda i: i.user.id)  # Uncomment to enable cooldown
+        # @app_commands.checks.cooldown(5, 120, key=lambda i: i.user.id)  # Uncomment to enable cooldown
         async def balance(interaction: discord.Interaction):
             # Retrieve user's current balance
             current_balance = self._validate_user(interaction.user.id, interaction.guild_id)
