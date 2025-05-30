@@ -1,296 +1,296 @@
 [
   {
-    "description": "You found a bush full of ripe berries and got ***1000*** berries!",
+    "description": "You found a bush full of ripe berries and got ***{value}*** berries!",
     "value": 1000,
     "rarity": "ultra rare"
   },
   {
-    "description": "You searched through bushes and found ***500*** berries!",
+    "description": "You searched through bushes and found ***{value}*** berries!",
     "value": 500,
     "rarity": "uncommon"
   },
   {
-    "description": "A Struthiomimus came up to you while searching for berries and dropped you ***500*** of them!",
+    "description": "A Struthiomimus came up to you while searching for berries and dropped you ***{value}*** of them!",
     "value": 500,
     "rarity": "uncommon"
   },
   {
-    "description": "While foraging, you tripped over a fallen log… but underneath it was a stash of ***200*** berries!",
+    "description": "While foraging, you tripped over a fallen log… but underneath it was a stash of ***{value}*** berries!",
     "value": 200,
     "rarity": "common"
   },
   {
-    "description": "You wandered into a shaded patch and found ***850*** berries!",
+    "description": "You wandered into a shaded patch and found ***{value}*** berries!",
     "value": 850,
     "rarity": "rare"
   },
   {
-    "description": "You spotted a glint of red in the grass—turns out to be ***400*** juicy berries!",
+    "description": "You spotted a glint of red in the grass—turns out to be ***{value}*** juicy berries!",
     "value": 400,
     "rarity": "common"
   },
   {
-    "description": "You returned to a spot you marked earlier and found ***700*** berries waiting.",
+    "description": "You returned to a spot you marked earlier and found ***{value}*** berries waiting.",
     "value": 700,
     "rarity": "uncommon"
   },
   {
-    "description": "You shook a bush with your crest and ***600*** berries rained down!",
+    "description": "You shook a bush with your crest and ***{value}*** berries rained down!",
     "value": 600,
     "rarity": "uncommon"
   },
   {
-    "description": "A baby Parasaurolophus pointed you toward a thicket; ***900*** berries inside!",
+    "description": "A baby Parasaurolophus pointed you toward a thicket; ***{value}*** berries inside!",
     "value": 900,
     "rarity": "rare"
   },
   {
-    "description": "While bathing in a stream, berries floated by—snagged ***250*** of them!",
+    "description": "While bathing in a stream, berries floated by—snagged ***{value}*** of them!",
     "value": 250,
     "rarity": "common"
   },
   {
-    "description": "You followed a trail of berry juice and discovered ***800*** ripe ones!",
+    "description": "You followed a trail of berry juice and discovered ***{value}*** ripe ones!",
     "value": 800,
     "rarity": "rare"
   },
   {
-    "description": "You chased off a Styracosaurus that was hoarding ***300*** berries—yours now!",
+    "description": "You chased off a Styracosaurus that was hoarding ***{value}*** berries—yours now!",
     "value": 300,
     "rarity": "common"
   },
   {
-    "description": "You dug under a fern and unearthed a buried stash—***700*** berries!",
+    "description": "You dug under a fern and unearthed a buried stash—***{value}*** berries!",
     "value": 700,
     "rarity": "uncommon"
   },
   {
-    "description": "A pile of dung had seeds growing around it—strange, but ***600*** berries gathered!",
+    "description": "A pile of dung had seeds growing around it—strange, but ***{value}*** berries gathered!",
     "value": 600,
     "rarity": "uncommon"
   },
   {
-    "description": "A thunderstorm rolled in, but you braved it for ***1000*** berries!",
+    "description": "A thunderstorm rolled in, but you braved it for ***{value}*** berries!",
     "value": 1000,
     "rarity": "ultra rare"
   },
   {
-    "description": "You found a hidden grove behind a waterfall—***1000*** berries!",
+    "description": "You found a hidden grove behind a waterfall—***{value}*** berries!",
     "value": 1000,
     "rarity": "ultra rare"
   },
   {
-    "description": "You knocked down a tree branch and got ***800*** berries off it.",
+    "description": "You knocked down a tree branch and got ***{value}*** berries off it.",
     "value": 800,
     "rarity": "rare"
   },
   {
-    "description": "You found a trail of smashed berries—only ***100*** salvageable.",
+    "description": "You found a trail of smashed berries—only ***{value}*** salvageable.",
     "value": 100,
     "rarity": "common"
   },
   {
-    "description": "A juvenile stole your berries, but you caught them! Got ***350*** back.",
+    "description": "A juvenile stole your berries, but you caught them! Got ***{value}*** back.",
     "value": 350,
     "rarity": "common"
   },
   {
-    "description": "You wandered near the herd's edge and found ***750*** untouched berries!",
+    "description": "You wandered near the herd's edge and found ***{value}*** untouched berries!",
     "value": 750,
     "rarity": "rare"
   },
   {
-    "description": "You bumped a branch and ***400*** berries dropped right onto your head!",
+    "description": "You bumped a branch and ***{value}*** berries dropped right onto your head!",
     "value": 400,
     "rarity": "common"
   },
   {
-    "description": "You tripped, rolled down a hill, and landed in a bush full of berries—***500*** berries for style!",
+    "description": "You tripped, rolled down a hill, and landed in a bush full of berries—***{value}*** berries for style!",
     "value": 500,
     "rarity": "uncommon"
   },
   {
-    "description": "You danced in the rain and stumbled on ***800*** berries, lucky day!",
+    "description": "You danced in the rain and stumbled on ***{value}*** berries, lucky day!",
     "value": 800,
     "rarity": "rare"
   },
   {
-    "description": "You foraged under moonlight, mysterious: but ***550*** berries found!",
+    "description": "You foraged under moonlight, mysterious: but ***{value}*** berries found!",
     "value": 550,
     "rarity": "uncommon"
   },
   {
-    "description": "You returned to a favorite spot and scored ***1000*** berries again!",
+    "description": "You returned to a favorite spot and scored ***{value}*** berries again!",
     "value": 1000,
     "rarity": "ultra rare"
   },
   {
-    "description": "You found a bush so heavy with berries it nearly collapsed—***1000*** berries!",
+    "description": "You found a bush so heavy with berries it nearly collapsed—***{value}*** berries!",
     "value": 1000,
     "rarity": "ultra rare"
   },
   {
-    "description": "You kicked over a log and found ***500*** berries nestled underneath.",
+    "description": "You kicked over a log and found ***{value}*** berries nestled underneath.",
     "value": 500,
     "rarity": "uncommon"
   },
   {
-    "description": "You followed a bird call and it led to ***780*** berries!",
+    "description": "You followed a bird call and it led to ***{value}*** berries!",
     "value": 780,
     "rarity": "rare"
   },
   {
-    "description": "A friend pointed out a dense shrub—***750*** berries were waiting.",
+    "description": "A friend pointed out a dense shrub—***{value}*** berries were waiting.",
     "value": 750,
     "rarity": "rare"
   },
   {
-    "description": "You stepped into a mossy patch and unearthed ***720*** berries.",
+    "description": "You stepped into a mossy patch and unearthed ***{value}*** berries.",
     "value": 720,
     "rarity": "rare"
   },
   {
-    "description": "You followed an insect trail and uncovered ***810*** sweet berries.",
+    "description": "You followed an insect trail and uncovered ***{value}*** sweet berries.",
     "value": 810,
     "rarity": "rare"
   },
   {
-    "description": "You circled a Big Quill Lake and found ***600*** berries near a fallen tree.",
+    "description": "You circled a Big Quill Lake and found ***{value}*** berries near a fallen tree.",
     "value": 600,
     "rarity": "uncommon"
   },
   {
-    "description": "You splashed into the pond of Hunter's Thicket and emerged with ***870*** berries!",
+    "description": "You splashed into the pond of Hunter's Thicket and emerged with ***{value}*** berries!",
     "value": 870,
     "rarity": "rare"
   },
   {
-    "description": "A bird's nest led you to a forgotten patch with ***600*** berries.",
+    "description": "A bird's nest led you to a forgotten patch with ***{value}*** berries.",
     "value": 600,
     "rarity": "uncommon"
   },
   {
-    "description": "You pushed through ferns and collected ***780*** berries from a shaded bush.",
+    "description": "You pushed through ferns and collected ***{value}*** berries from a shaded bush.",
     "value": 780,
     "rarity": "rare"
   },
   {
-    "description": "You asked a Deinonychus if it had seen berries... it screamed and ran off. You followed and found ***800*** berries behind it!",
+    "description": "You asked a Deinonychus if it had seen berries... it screamed and ran off. You followed and found ***{value}*** berries behind it!",
     "value": 800,
     "rarity": "rare"
   },
   {
-    "description": "A snooty Psittacosaurus challenged you to a berry-finding contest. You won with ***400*** berries and it stormed off muttering.",
+    "description": "A snooty Psittacosaurus challenged you to a berry-finding contest. You won with ***{value}*** berries and it stormed off muttering.",
     "value": 400,
     "rarity": "common"
   },
   {
-    "description": "A Kentrosaurus tail-whipped a tree in frustration. ***600*** berries fell and you casually gathered them.",
+    "description": "A Kentrosaurus tail-whipped a tree in frustration. ***{value}*** berries fell and you casually gathered them.",
     "value": 600,
     "rarity": "uncommon"
   },
   {
-    "description": "You and an Eotriceratops played \"who can bonk the bush hardest\"—you won ***1000*** berries and a sore crest.",
+    "description": "You and an Eotriceratops played \"who can bonk the bush hardest\"—you won ***{value}*** berries and a sore crest.",
     "value": 1000,
     "rarity": "ultra rare"
   },
   {
-    "description": "A Ceratosaurus roared at you. You screamed back louder. It left. You got ***400*** berries and no regrets.",
+    "description": "A Ceratosaurus roared at you. You screamed back louder. It left. You got ***{value}*** berries and no regrets.",
     "value": 400,
     "rarity": "common"
   },
   {
-    "description": "A sleepy Anodontosaurus crushed a berry patch in its nap. You scooped ***200*** mashed ones from under its tail.",
+    "description": "A sleepy Anodontosaurus crushed a berry patch in its nap. You scooped ***{value}*** mashed ones from under its tail.",
     "value": 200,
     "rarity": "common"
   },
   {
-    "description": "A Segnosaurus was too busy posing to notice the ***600*** berries behind it. You graciously helped yourself.",
+    "description": "A Segnosaurus was too busy posing to notice the ***{value}*** berries behind it. You graciously helped yourself.",
     "value": 600,
     "rarity": "uncommon"
   },
   {
-    "description": "You walked in on two Pachycephalosaurs bonking at a tree. Berries rained down from the impact—***500*** berries gathered!",
+    "description": "You walked in on two Pachycephalosaurs bonking at a tree. Berries rained down from the impact—***{value}*** berries gathered!",
     "value": 500,
     "rarity": "uncommon"
   },
   {
-    "description": "A group of Utahraptors were too busy arguing over a bone. You waltzed in and took the ***900***-berry jackpot next to them.",
+    "description": "A group of Utahraptors were too busy arguing over a bone. You waltzed in and took the ***{value}***-berry jackpot next to them.",
     "value": 900,
     "rarity": "rare"
   },
   {
-    "description": "A snoozing Deinocheirus was humming in its sleep. You collected ***300*** berries around it without waking the gentle giant.",
+    "description": "A snoozing Deinocheirus was humming in its sleep. You collected ***{value}*** berries around it without waking the gentle giant.",
     "value": 300,
     "rarity": "common"
   },
   {
-    "description": "A bickering pair of Apatosaurus were arguing over who found the bush first. You just took the ***650*** berries and left.",
+    "description": "A bickering pair of Apatosaurus were arguing over who found the bush first. You just took the ***{value}*** berries and left.",
     "value": 650,
     "rarity": "uncommon"
   },
   {
-    "description": "A well-kept Bonapartenykus gifted you ***700*** berries after you complimented their tail.",
+    "description": "A well-kept Bonapartenykus gifted you ***{value}*** berries after you complimented their tail.",
     "value": 700,
     "rarity": "uncommon"
   },
   {
-    "description": "A Citipati offered you ***600*** berries for not honking near its nap spot. Fair trade.",
+    "description": "A Citipati offered you ***{value}*** berries for not honking near its nap spot. Fair trade.",
     "value": 600,
     "rarity": "uncommon"
   },
   {
-    "description": "After foraging, you return to find a sneaky Rhamphorhynchus stole ***300*** berries from your pile!",
+    "description": "After foraging, you return to find a sneaky Rhamphorhynchus stole ***{value}*** berries from your pile!",
     "value": -300,
     "rarity": "common"
   },
   {
-    "description": "You found a berry patch picked clean... ***0*** berries this time.",
+    "description": "You found a berry patch picked clean... ***{value}*** berries this time.",
     "value": 0,
     "rarity": "common"
   },
   {
-    "description": "You wandered too far and found nothing but thorns—***0*** berries.",
+    "description": "You wandered too far and found nothing but thorns—***{value}*** berries.",
     "value": 0,
     "rarity": "common"
   },
   {
-    "description": "A dry patch gave you nothing but dust—***0*** berries today.",
+    "description": "A dry patch gave you nothing but dust—***{value}*** berries today.",
     "value": 0,
     "rarity": "common"
   },
   {
-    "description": "A juvenile Therizinosaurus stole your berries, and its father was right behind him: lost ***850*** berries!",
+    "description": "A juvenile Therizinosaurus stole your berries, and its father was right behind him: lost ***{value}*** berries!",
     "value": -850,
     "rarity": "rare"
   },
   {
-    "description": "A Deinosuchus roared nearby—you ran and dropped ***800*** berries!",
+    "description": "A Deinosuchus roared nearby—you ran and dropped ***{value}*** berries!",
     "value": -800,
     "rarity": "rare"
   },
   {
-    "description": "You searched high and low… and found ***0*** berries. Just leaves. Crunchy, disappointing leaves.",
+    "description": "You searched high and low… and found ***{value}*** berries. Just leaves. Crunchy, disappointing leaves.",
     "value": 0,
     "rarity": "common"
   },
   {
-    "description": "A Struthiomimus ran past and stole ***300*** berries right out of your mouth.",
+    "description": "A Struthiomimus ran past and stole ***{value}*** berries right out of your mouth.",
     "value": -300,
     "rarity": "common"
   },
   {
-    "description": "A Dryosaurus screamed at you for looking at its bush. You left with ***0*** berries and wounded pride.",
+    "description": "A Dryosaurus screamed at you for looking at its bush. You left with ***{value}*** berries and wounded pride.",
     "value": 0,
     "rarity": "common"
   },
   {
-    "description": "You reached for a shiny berry... but it was a rock: ***0*** berries!",
+    "description": "You reached for a shiny berry... but it was a rock: ***{value}*** berries!",
     "value": 0,
     "rarity": "common"
   },
   {
-    "description": "You found a promising bush—but it was full of thorny twigs and lies: ***0*** berries!",
+    "description": "You found a promising bush—but it was full of thorny twigs and lies: ***{value}*** berries!",
     "value": 0,
     "rarity": "common"
   },
@@ -300,7 +300,7 @@
     "rarity": "common"
   },
   {
-    "description": "A strong gust of wind blew all the berries off the bush. Into a river. ***0*** berries!",
+    "description": "A strong gust of wind blew all the berries off the bush. Into a river. ***{value}*** berries!",
     "value": 0,
     "rarity": "common"
   },
@@ -310,17 +310,17 @@
     "rarity": "common"
   },
   {
-    "description": "You found a great bush… but so did ten angry Eotriceratops. You retreated with ***0***.",
+    "description": "You found a great bush… but so did ten angry Eotriceratops. You retreated with ***{value}***.",
     "value": 0,
     "rarity": "common"
   },
   {
-    "description": "You got stuck in a bush trying to reach a single berry. You didn’t even get the berry.",
+    "description": "You got stuck in a bush trying to reach a single berry. You didn't even get the berry.",
     "value": 0,
     "rarity": "common"
   },
   {
-    "description": "An Argentinosaurus offered to “share” the bush. You blinked. It took everything.",
+    "description": "An Argentinosaurus offered to \"share\" the bush. You blinked. It took everything.",
     "value": 0,
     "rarity": "common"
   },
@@ -335,12 +335,12 @@
     "rarity": "common"
   },
   {
-    "description": "A Compsognathus offered to “watch your stash.” You came back to ***1000*** stolen berries and zero Compsognathus.",
+    "description": "A Compsognathus offered to \"watch your stash.\" You came back to ***{value}*** stolen berries and zero Compsognathus.",
     "value": -1000,
     "rarity": "ultra rare"
   },
   {
-    "description": "You stood in front of a bush for ten minutes, unsure if it was real. It wasn’t.",
+    "description": "You stood in front of a bush for ten minutes, unsure if it was real. It wasn't.",
     "value": 0,
     "rarity": "common"
   },
@@ -360,7 +360,7 @@
     "rarity": "common"
   },
   {
-    "description": "An Anodontosaurus screamed “MY BUSH” and shoved you down a hill. No berries, just ego damage.",
+    "description": "An Anodontosaurus screamed \"MY BUSH\" and shoved you down a hill. No berries, just ego damage.",
     "value": 0,
     "rarity": "common"
   },
@@ -370,7 +370,7 @@
     "rarity": "common"
   },
   {
-    "description": "A Spinosaurus hissed from the water. You dropped ***1000*** berries out of instinct.",
+    "description": "A Spinosaurus hissed from the water. You dropped ***{value}*** berries out of instinct.",
     "value": -1000,
     "rarity": "ultra rare"
   },
@@ -385,7 +385,7 @@
     "rarity": "common"
   },
   {
-    "description": "You finally found berries… just as it started raining, and everything turned to mush: ***0*** berries!",
+    "description": "You finally found berries… just as it started raining, and everything turned to mush: ***{value}*** berries!",
     "value": 0,
     "rarity": "common"
   },
@@ -420,7 +420,7 @@
     "rarity": "common"
   },
   {
-    "description": "You knocked a full branch down—but a Psittacosaurus yelled “FINDERS KEEPERS!” and ran off with it.",
+    "description": "You knocked a full branch down—but a Psittacosaurus yelled \"FINDERS KEEPERS!\" and ran off with it.",
     "value": 0,
     "rarity": "common"
   },
@@ -440,7 +440,7 @@
     "rarity": "common"
   },
   {
-    "description": "A juvenile Parasaurolophus offered you a “trade.” You gave some new berries. It gave you a rock—***0*** berries!",
+    "description": "A juvenile Parasaurolophus offered you a \"trade.\" You gave some new berries. It gave you a rock—***{value}*** berries!",
     "value": 0,
     "rarity": "common"
   },
@@ -450,12 +450,12 @@
     "rarity": "common"
   },
   {
-    "description": "You spotted a bush… so did a Sauropod’s foot. You didn’t even try to argue.",
+    "description": "You spotted a bush… so did a Sauropod's foot. You didn't even try to argue.",
     "value": 0,
     "rarity": "common"
   },
   {
-    "description": "You found purple “berries” and realized too late they were tiny dino droppings.",
+    "description": "You found purple \"berries\" and realized too late they were tiny dino droppings.",
     "value": 0,
     "rarity": "common"
   },
@@ -465,7 +465,7 @@
     "rarity": "common"
   },
   {
-    "description": "You found blue berries! Then a Lambeosaurus told you those were poisonous—***0*** berries!",
+    "description": "You found blue berries! Then a Lambeosaurus told you those were poisonous—***{value}*** berries!",
     "value": 0,
     "rarity": "common"
   }
