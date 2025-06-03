@@ -13,6 +13,6 @@ class Logger:
 
 
 if __name__ == "__main__":
-    logger = Logger("log.txt")
+    logger = Logger("../log.txt")
 
     logger.log("Hello World", "Logging Test")

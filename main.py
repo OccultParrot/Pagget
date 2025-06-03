@@ -1,7 +1,3 @@
-"""
-TODO:
-- Fix to low bet message from being public
-"""
 import atexit
 import json
 import math
@@ -15,13 +11,13 @@ import discord
 import dotenv
 import requests
 from discord import app_commands
-from discord.ext.commands import CommandOnCooldown
 from rich.console import Console
 
-from gambling import Roulette, Blackjack, Slots
-from logger import Logger
-from permissions import has_admin_check
-from typepairs import Affliction, AfflictionEncoder, GuildConfig, GuildConfigEncoder, GatherOutcome, \
+from classes.afflictions import AfflictionController
+from classes.gambling import Roulette, Blackjack, Slots
+from classes.logger import Logger
+from classes.permissions import has_admin_check
+from classes.typepairs import Affliction, AfflictionEncoder, GuildConfig, GuildConfigEncoder, GatherOutcome, \
     GatherOutcomeEncoder
 
 # Constants
@@ -46,20 +42,6 @@ def get_paths(directory_name: str, guild_id: int) -> (str, str):
                                                                       f"{guild_id}.json")
 
 
-def get_rarity_color(rarity: str) -> discord.Color:
-    """Get the color associated with a rarity."""
-    if rarity.lower() == "common":
-        return discord.Color.green()
-    elif rarity.lower() == "uncommon":
-        return discord.Color.blue()
-    elif rarity.lower() == "rare":
-        return discord.Color.purple()
-    elif rarity.lower() == "ultra rare":
-        return discord.Color.yellow()
-    else:
-        return discord.Color.default()
-
-
 def get_outcome_color(value: int) -> discord.Color:
     if value < 0:
         return discord.Color.red()
@@ -67,15 +49,6 @@ def get_outcome_color(value: int) -> discord.Color:
         return discord.Color.greyple()
     else:
         return discord.Color.green()
-
-
-def get_affliction_embed(affliction: Affliction) -> discord.Embed:
-    """Create a Discord embed for an affliction."""
-    return discord.Embed(
-        title=affliction.name.title(),
-        description=f"-# {affliction.rarity.title()}\n{'-# *Minor Affliction*' if affliction.is_minor else ''}\n\n{affliction.description}",
-        color=get_rarity_color(affliction.rarity)
-    )
 
 
 def get_outcome_embed(gather_type: Literal["hunt", "steal"], outcome: GatherOutcome, old_balance: int, new_balance: int,
@@ -127,14 +100,6 @@ def organise_rarities(dictionary: dict[int, List[Affliction | GatherOutcome]], i
     return [commons, uncommons, rares, ultra_rares], [60, 25, 10, 5]
 
 
-"""
-The view contains a callback, and a values dict
-when the user selects a bet type, we update the values dict, 
-and update the message with the new values and remove the select with a button prompting the user to enter their bet amount.
-The button will then send a modal for the user to enter their bet amount. After they enter their bet amount, they will be prompted with buttons for "cancel" and "join"
-"""
-
-
 class Pagget:
     """Main bot class to handle Discord interactions and affliction management."""
 
@@ -152,8 +117,6 @@ class Pagget:
         # Setup console and logging
         self.console = Console()
         self.logger = Logger(LOG_FILE)
-
-        self.rarity_list = [("rare", "sparkles"), ("ultra rare", "star2")]
 
         self.roulette_bet_types: dict[str, str] = {
             "red": "Red",
@@ -365,69 +328,6 @@ class Pagget:
     def _register_commands(self):
         """Register all Discord slash commands."""
 
-        # region Affliction Commands
-        @self.tree.command(name="roll-affliction", description="Rolls for standard afflictions affecting your dinosaur")
-        @app_commands.describe(dino="Your dinosaur's name")
-        @app_commands.checks.cooldown(1, 3600, key=lambda i: i.user.id)  # Uncomment to enable cooldown
-        async def roll_affliction(interaction: discord.Interaction, dino: str):
-            try:
-                afflictions: List[Affliction] = self._roll_for_afflictions(interaction.guild_id, is_minor=False)
-
-                dino = dino.capitalize()
-
-                if not afflictions:
-                    await interaction.response.send_message(f"{dino} has **no** afflictions")
-                    return
-
-                if len(afflictions) == 1:
-                    await interaction.response.send_message(
-                        f"{dino} has **{afflictions[0].name}**.",
-                        embed=get_affliction_embed(afflictions[0])
-                    )
-                    return
-
-                await interaction.response.send_message(f"{dino} has the following afflictions:",
-                                                        embeds=[get_affliction_embed(affliction) for affliction in
-                                                                afflictions])
-
-            except CommandOnCooldown as e:
-                self.logger.log(f"Command on cooldown")
-                await interaction.response.send_message(e, ephemeral=True)
-
-            except Exception as e:
-                self.logger.log(f"Error in roll_affliction: {e}", "Bot")
-                await interaction.response.send_message("An error occurred while rolling for afflictions",
-                                                        ephemeral=True)
-
-        @self.tree.command(name="roll-minor-affliction",
-                           description="Rolls for minor afflictions affecting your dinosaur")
-        @app_commands.describe(dino="Your dinosaur's name")
-        @app_commands.checks.cooldown(1, 3600, key=lambda i: i.user.id)  # Uncomment to enable cooldown
-        async def roll_minor_affliction(interaction: discord.Interaction, dino: str):
-            try:
-                afflictions: List[Affliction] = self._roll_for_afflictions(interaction.guild_id, is_minor=True)
-
-                dino = dino.capitalize()
-
-                if not afflictions:
-                    await interaction.response.send_message(f"{dino} has **no** minor afflictions")
-                    return
-
-                if len(afflictions) == 1:
-                    await interaction.response.send_message(
-                        f"{dino} has **{afflictions[0].name}**.",
-                        embed=get_affliction_embed(afflictions[0]))
-                    return
-
-                await interaction.response.send_message(f"{dino} has the following minor afflictions:",
-                                                        embeds=[get_affliction_embed(affliction) for affliction in
-                                                                afflictions])
-
-            except Exception as e:
-                self.logger.log(f"Error in roll_minor_affliction: {e}", "Bot")
-                await interaction.response.send_message("An error occurred while rolling for minor afflictions",
-                                                        ephemeral=True)
-
         @self.tree.command(name="list-afflictions", description="Lists all available afflictions")
         @app_commands.describe(page="What page to display")
         async def list_afflictions(interaction: discord.Interaction, page: int = 1):
@@ -463,7 +363,7 @@ class Pagget:
                 sorted_afflictions = sorted_afflictions[start:end]
 
                 # Create embeds for each affliction
-                embeds = [get_affliction_embed(affliction) for affliction in sorted_afflictions]
+                embeds = [AfflictionController.get_embed(affliction) for affliction in sorted_afflictions]
 
                 # Add page number to the last embed's footer
                 if embeds:
@@ -514,7 +414,8 @@ class Pagget:
                                 cls=AfflictionEncoder)
 
                 await interaction.response.send_message(f"Affliction '{name}' added successfully.",
-                                                        embed=get_affliction_embed(new_affliction), ephemeral=True)
+                                                        embed=AfflictionController.get_embed(new_affliction),
+                                                        ephemeral=True)
                 self.logger.log(f"{interaction.user.name} added affliction {name}", "Bot")
 
             except Exception as e:
@@ -536,7 +437,7 @@ class Pagget:
                 self._save_json(interaction.guild_id, "afflictions", self.afflictions_dict[interaction.guild_id],
                                 cls=AfflictionEncoder)
 
-                embed = get_affliction_embed(affliction_to_remove)
+                embed = AfflictionController.get_embed(affliction_to_remove)
                 embed.set_footer(text="Affliction removed")
 
                 await interaction.response.send_message(f"Affliction '{name}' removed successfully.", embed=embed,
@@ -595,7 +496,7 @@ class Pagget:
                                 cls=AfflictionEncoder)
 
                 await interaction.response.send_message(f"Affliction '{affliction}' edited successfully.",
-                                                        embed=get_affliction_embed(affliction_to_edit),
+                                                        embed=AfflictionController.get_embed(affliction_to_edit),
                                                         ephemeral=True)
                 self.logger.log(f"{interaction.user.name} edited affliction {affliction}", "Bot")
 
@@ -651,36 +552,65 @@ class Pagget:
         # endregion
 
         # region Error Handling
-        @roll_affliction.error
-        async def roll_affliction_error(interaction: discord.Interaction, error: app_commands.AppCommandError):
-            await read_error([interaction], error, self.logger)
 
-        @roll_minor_affliction.error
-        async def roll_minor_affliction_error(interaction: discord.Interaction, error: app_commands.AppCommandError):
-            await read_error([interaction], error, self.logger)
-
-        @list_afflictions.error
-        async def list_afflictions_error(interaction: discord.Interaction, error: app_commands.AppCommandError):
-            await read_error([interaction], error, self.logger)
-
-        @add_affliction.error
-        async def add_affliction_error(interaction: discord.Interaction, error: app_commands.AppCommandError):
-            await read_error([interaction], error, self.logger)
-
-        @remove_affliction.error
-        async def remove_affliction_error(interaction: discord.Interaction, error: app_commands.AppCommandError):
-            await read_error([interaction], error, self.logger)
-
-        @set_configs.error
-        async def set_configs_error(interaction: discord.Interaction, error: app_commands.AppCommandError):
-            await read_error([interaction], error, self.logger)
+        list_afflictions.error(self.command_error_handler)
+        add_affliction.error(self.command_error_handler)
+        remove_affliction.error(self.command_error_handler)
+        set_configs.error(self.command_error_handler)
 
         # endregion
+
+        # Add affliction commands to the tree
+        self.tree.add_command(self._register_affliction_commands())
 
         # Add the berry commands to the command tree
         self.tree.add_command(self._register_berry_commands())
 
         # @self.tree.add_command(name="help")
+
+    def _register_affliction_commands(self) -> app_commands.Group:
+        group = app_commands.Group(name="affliction", description="Affliction commands")
+
+        async def roll(interaction: discord.Interaction, dino: str, chance: float, is_minor: bool):
+            afflictions = AfflictionController.roll(self.afflictions_dict[interaction.guild_id], chance, is_minor)
+
+            dino = dino.capitalize()
+
+            if not afflictions:
+                await interaction.response.send_message(f"{dino} has **no** afflictions")
+                return
+
+            if len(afflictions) == 1:
+                await interaction.response.send_message(
+                    f"{dino} has **{afflictions[0].name}**.",
+                    embed=AfflictionController.get_embed(afflictions[0])
+                )
+                return
+
+            await interaction.response.send_message(f"{dino} has the following afflictions:",
+                                                    embeds=[AfflictionController.get_embed(affliction) for affliction in
+                                                            afflictions])
+
+        @group.command(name="roll", description="Rolls for afflictions affecting your dinosaur")
+        @app_commands.describe(dino="Your dinosaur's name")
+        # @app_commands.checks.cooldown(1, 3600, key=lambda i: i.user.id)  # Uncomment to enable cooldown
+        async def roll_general(interaction: discord.Interaction, dino: str):
+            await roll(interaction, dino, self.guild_configs[interaction.guild_id].chance, False)
+
+        @group.command(name="roll-minor", description="Rolls for minor afflictions affecting your dinosaur")
+        @app_commands.describe(dino="Your dinosaur's name")
+        # @app_commands.checks.cooldown(1, 3600, key=lambda i: i.user.id)  # Uncomment to enable cooldown
+        async def roll_minor(interaction: discord.Interaction, dino: str):
+            await roll(interaction, dino, self.guild_configs[interaction.guild_id].chance, True)
+
+        # --- Handling Errors --- #
+        async def command_error_handler(interaction: discord.Interaction, error: app_commands.AppCommandError):
+            await read_error([interaction], error, self.logger)
+
+        roll_general.error(command_error_handler)
+        roll_minor.error(command_error_handler)
+
+        return group
 
     def _register_berry_commands(self) -> app_commands.Group:
         """Register berry-related commands as a command group."""
@@ -792,21 +722,11 @@ class Pagget:
             await interaction.response.send_message(f"Added {new_balance} berries to {user.name}'s balance.",
                                                     ephemeral=True)
 
-        @hunt.error
-        async def set_configs_error(interaction: discord.Interaction, error: app_commands.AppCommandError):
-            await read_error([interaction], error, self.logger)
-
-        @steal.error
-        async def set_configs_error(interaction: discord.Interaction, error: app_commands.AppCommandError):
-            await read_error([interaction], error, self.logger)
-
-        @balance.error
-        async def set_configs_error(interaction: discord.Interaction, error: app_commands.AppCommandError):
-            await read_error([interaction], error, self.logger)
-
-        @set_berries.error
-        async def set_configs_error(interaction: discord.Interaction, error: app_commands.AppCommandError):
-            await read_error([interaction], error, self.logger)
+        # Handling errors
+        hunt.error(self.command_error_handler)
+        steal.error(self.command_error_handler)
+        balance.error(self.command_error_handler)
+        set_berries.error(self.command_error_handler)
 
         # Add gambling commands to the berries group
         berries_group.add_command(self._register_gambling_commands())
@@ -895,6 +815,9 @@ class Pagget:
             await read_error([interaction], error, self.logger)
 
         return gambling_group
+
+    async def command_error_handler(self, interaction: discord.Interaction, error: app_commands.AppCommandError):
+        await read_error([interaction], error, self.logger)
 
     def _register_events(self):
         """Register Discord client events."""
@@ -1362,7 +1285,6 @@ class Pagget:
         return self.guild_configs[guild_id].starting_pay
 
     def _write_token_file(self, token: str):
-
         if not self._validate_directory("data/"):
             return
 
