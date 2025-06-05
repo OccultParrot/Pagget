@@ -9,19 +9,21 @@ from classes.typepairs import Affliction
 class AfflictionController:
     """ This class does everything with afflictions """
 
-    def search_affliction(self, search_term: str) -> Optional[Affliction]:
+    @staticmethod
+    def search_affliction(afflictions: List[Affliction],search_term: str) -> Optional[Affliction]:
         """
         Find an affliction by a search term.
         
         Args:
             search_term: The term to search for
+            afflictions: The list of afflictions to search in
             
         Returns:
             The full affliction string if found, None otherwise
         """
         search_term = search_term.lower()
 
-        for affliction in self.afflictions:
+        for affliction in afflictions:
             name = affliction.name.lower()
             if search_term in name or search_term == name.split()[0]:
                 return affliction
@@ -29,12 +31,14 @@ class AfflictionController:
         return None
 
     @staticmethod
-    def list_afflictions(afflictions: List[Affliction], interaction: discord.Interaction):
+    def list_afflictions(afflictions: List[Affliction], page: int):
         commons, uncommons, rares, ultra_rares = AfflictionController._sort_rarities(afflictions)
         commons = sorted(commons, key=lambda affliction: affliction.name.lower())
         uncommons = sorted(uncommons, key=lambda affliction: affliction.name.lower())
         rares = sorted(rares, key=lambda affliction: affliction.name.lower())
         ultra_rares = sorted(ultra_rares, key=lambda affliction: affliction.name.lower())
+        
+        return commons + uncommons + rares + ultra_rares
 
     @staticmethod
     def roll(afflictions: List[Affliction], affliction_chance: float, is_minor: bool) -> (Affliction, bool):

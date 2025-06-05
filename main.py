@@ -328,183 +328,6 @@ class Pagget:
     def _register_commands(self):
         """Register all Discord slash commands."""
 
-        @self.tree.command(name="list-afflictions", description="Lists all available afflictions")
-        @app_commands.describe(page="What page to display")
-        async def list_afflictions(interaction: discord.Interaction, page: int = 1):
-            try:
-                common = sorted(
-                    [a for a in self.afflictions_dict[interaction.guild_id] if a.rarity.lower() == "common"],
-                    key=lambda a: a.name.lower())
-
-                uncommon = sorted(
-                    [a for a in self.afflictions_dict[interaction.guild_id] if a.rarity.lower() == "uncommon"],
-                    key=lambda a: a.name.lower())
-
-                rare = sorted([a for a in self.afflictions_dict[interaction.guild_id] if a.rarity.lower() == "rare"],
-                              key=lambda a: a.name.lower())
-
-                ultra_rare = sorted(
-                    [a for a in self.afflictions_dict[interaction.guild_id] if a.rarity.lower() == "ultra rare"],
-                    key=lambda a: a.name.lower())
-
-                sorted_afflictions = common + uncommon + rare + ultra_rare
-
-                length = len(sorted_afflictions)
-
-                pages = math.ceil(length / 10)
-
-                if page < 1 or page > pages:
-                    await interaction.response.send_message(
-                        f"Page {page} does not exist. There are only {pages} pages.")
-                    return
-
-                start = (page - 1) * 10
-                end = start + 10
-                sorted_afflictions = sorted_afflictions[start:end]
-
-                # Create embeds for each affliction
-                embeds = [AfflictionController.get_embed(affliction) for affliction in sorted_afflictions]
-
-                # Add page number to the last embed's footer
-                if embeds:
-                    embeds[-1].set_footer(text=f"Page {page}/{pages}")
-
-                await interaction.response.send_message(f"**Available Afflictions:** (Page {page}/{pages})",
-                                                        embeds=embeds)
-                self.logger.log(f"{interaction.user.name} listed all afflictions", "Bot")
-
-            except Exception as e:
-                self.logger.log(f"Error in list_afflictions: {e}", "Bot")
-                await interaction.response.send_message("An error occurred while listing afflictions", ephemeral=True)
-
-        # endregion
-
-        # region Admin Commands
-
-        ## Affliction Admin Commands
-        @self.tree.command(
-            name="add-affliction",
-            description="Adds an affliction to the list")
-        @app_commands.describe(
-            name="Name of the affliction",
-            description="Description of the affliction",
-            rarity="Rarity of the affliction",
-            is_minor="Whether the affliction is minor or not. ONLY AFFECTS COMMON RARITY"
-        )
-        @app_commands.choices(
-            rarity=[
-                app_commands.Choice(name="Common", value="common"),
-                app_commands.Choice(name="Uncommon", value="uncommon"),
-                app_commands.Choice(name="Rare", value="rare"),
-                app_commands.Choice(name="Ultra Rare", value="ultra rare")
-            ]
-        )
-        @app_commands.checks.has_permissions(administrator=True)
-        async def add_affliction(interaction: discord.Interaction, name: str, description: str,
-                                 rarity: app_commands.Choice[str], is_minor: bool = False):
-            try:
-                # Check if the affliction already exists
-                if self._if_affliction_exists(name, interaction.guild_id):
-                    await interaction.response.send_message(f"Affliction '{name}' already exists.", ephemeral=True)
-                    return
-
-                new_affliction = Affliction(name=name, description=description, rarity=rarity.value, is_minor=is_minor)
-                self.afflictions_dict[interaction.guild_id].append(new_affliction)
-                self._save_json(interaction.guild_id, "afflictions", self.afflictions_dict[interaction.guild_id],
-                                cls=AfflictionEncoder)
-
-                await interaction.response.send_message(f"Affliction '{name}' added successfully.",
-                                                        embed=AfflictionController.get_embed(new_affliction),
-                                                        ephemeral=True)
-                self.logger.log(f"{interaction.user.name} added affliction {name}", "Bot")
-
-            except Exception as e:
-                self.logger.log(f"Error in add_affliction: {e}", "Bot")
-                await interaction.response.send_message("An error occurred while adding the affliction", ephemeral=True)
-
-        @self.tree.command(name="remove-affliction", description="Removes an affliction from the list")
-        @app_commands.describe(name="Name of the affliction")
-        @app_commands.checks.has_permissions(administrator=True)
-        async def remove_affliction(interaction: discord.Interaction, name: str):
-            try:
-                # Check if the affliction does not exist
-                if not self._if_affliction_exists(name, interaction.guild_id):
-                    await interaction.response.send_message(f"Affliction '{name}' does not exist.", ephemeral=True)
-                    return
-
-                affliction_to_remove = self._get_affliction_from_name(name, interaction.guild_id)[0]
-                self.afflictions_dict[interaction.guild_id].remove(affliction_to_remove)
-                self._save_json(interaction.guild_id, "afflictions", self.afflictions_dict[interaction.guild_id],
-                                cls=AfflictionEncoder)
-
-                embed = AfflictionController.get_embed(affliction_to_remove)
-                embed.set_footer(text="Affliction removed")
-
-                await interaction.response.send_message(f"Affliction '{name}' removed successfully.", embed=embed,
-                                                        ephemeral=True)
-                self.logger.log(f"{interaction.user.name} removed affliction {name}", "Bot")
-
-            except Exception as e:
-                self.logger.log(f"Error in remove_affliction: {e}", "Bot")
-                await interaction.response.send_message("An error occurred while removing the affliction",
-                                                        ephemeral=True)
-
-        @self.tree.command(name="edit-affliction", description="Edits an affliction from the list")
-        @app_commands.describe(affliction="Current name of the affliction",
-                               name="New name for the affliction",
-                               description="New description of the affliction",
-                               rarity="New rarity of the affliction",
-                               is_minor="Whether the affliction is minor or not. ONLY AFFECTS COMMON RARITY")
-        @app_commands.choices(
-            rarity=[
-                app_commands.Choice(name="Common", value="common"),
-                app_commands.Choice(name="Uncommon", value="uncommon"),
-                app_commands.Choice(name="Rare", value="rare"),
-                app_commands.Choice(name="Ultra Rare", value="ultra rare")
-            ]
-        )
-        @app_commands.checks.has_permissions(administrator=True)
-        async def edit_affliction(interaction: discord.Interaction, affliction: str, name: str = None,
-                                  description: str = None, rarity: app_commands.Choice[str] = None,
-                                  is_minor: bool = False):
-            try:
-                # Check if the affliction exists
-                if not self._if_affliction_exists(affliction, interaction.guild_id):
-                    await interaction.response.send_message(f"Affliction '{affliction}' does not exist.",
-                                                            ephemeral=True)
-                    return
-
-                # Check if the new name already exists (if name is being changed)
-                if name and name != affliction and self._if_affliction_exists(name, interaction.guild_id):
-                    await interaction.response.send_message(f"Affliction with name '{name}' already exists.",
-                                                            ephemeral=True)
-                    return
-
-                affliction_to_edit, index = self._get_affliction_from_name(affliction, interaction.guild_id)
-
-                if name:
-                    affliction_to_edit.name = name
-                if description:
-                    affliction_to_edit.description = description
-                if rarity:
-                    affliction_to_edit.rarity = rarity.value
-                if is_minor:
-                    affliction_to_edit.is_minor = is_minor
-
-                self.afflictions_dict[interaction.guild_id][index] = affliction_to_edit
-                self._save_json(interaction.guild_id, "afflictions", self.afflictions_dict[interaction.guild_id],
-                                cls=AfflictionEncoder)
-
-                await interaction.response.send_message(f"Affliction '{affliction}' edited successfully.",
-                                                        embed=AfflictionController.get_embed(affliction_to_edit),
-                                                        ephemeral=True)
-                self.logger.log(f"{interaction.user.name} edited affliction {affliction}", "Bot")
-
-            except Exception as e:
-                self.logger.log(f"Error in edit_affliction: {e}", "Bot")
-                await interaction.response.send_message("An error occurred while editing the affliction",
-                                                        ephemeral=True)
-
         @self.tree.command(name="set-configs",
                            description="Sets the guild configuration. Dont enter any changes to view the current configuration")
         @app_commands.describe(species="Species of the dinosaur",
@@ -549,16 +372,7 @@ class Pagget:
                 await interaction.response.send_message("An error occurred while setting the guild configuration",
                                                         ephemeral=True)
 
-        # endregion
-
-        # region Error Handling
-
-        list_afflictions.error(self.command_error_handler)
-        add_affliction.error(self.command_error_handler)
-        remove_affliction.error(self.command_error_handler)
         set_configs.error(self.command_error_handler)
-
-        # endregion
 
         # Add affliction commands to the tree
         self.tree.add_command(self._register_affliction_commands())
@@ -603,12 +417,144 @@ class Pagget:
         async def roll_minor(interaction: discord.Interaction, dino: str):
             await roll(interaction, dino, self.guild_configs[interaction.guild_id].chance, True)
 
-        # --- Handling Errors --- #
-        async def command_error_handler(interaction: discord.Interaction, error: app_commands.AppCommandError):
-            await read_error([interaction], error, self.logger)
+        @group.command(name="list", description="Lists all available afflictions")
+        @app_commands.describe(page="What page to display")
+        async def list_afflictions(interaction: discord.Interaction, page: int = 1):
+            sorted_afflictions = AfflictionController.list_afflictions(self.afflictions_dict[interaction.guild_id],
+                                                                       page)
 
-        roll_general.error(command_error_handler)
-        roll_minor.error(command_error_handler)
+            length = len(sorted_afflictions)
+
+            pages = math.ceil(length / 10)
+
+            if page < 1 or page > pages:
+                await interaction.response.send_message(
+                    f"Page {page} does not exist. There are only {pages} pages.")
+                return
+
+            start = (page - 1) * 10
+            end = start + 10
+            sorted_afflictions = sorted_afflictions[start:end]
+
+            # Create embeds for each affliction
+            embeds = [AfflictionController.get_embed(affliction) for affliction in sorted_afflictions]
+
+            # Add page number to the last embed's footer
+            if embeds:
+                embeds[-1].set_footer(text=f"Page {page}/{pages}")
+
+            await interaction.response.send_message(f"**Available Afflictions:** (Page {page}/{pages})",
+                                                    embeds=embeds)
+            self.logger.log(f"{interaction.user.name} listed all afflictions", "Bot")
+
+        @group.command(name="add", description="Adds a new affliction to the database")
+        @app_commands.describe(name="Name of the affliction", description="Description of the affliction",
+                               rarity="Rarity of the affliction",
+                               is_minor="Whether the affliction is minor or not. ONLY AFFECTS COMMON RARITY")
+        @app_commands.choices(
+            rarity=[
+                app_commands.Choice(name="Common", value="common"),
+                app_commands.Choice(name="Uncommon", value="uncommon"),
+                app_commands.Choice(name="Rare", value="rare"),
+                app_commands.Choice(name="Ultra Rare", value="ultra rare")
+            ]
+        )
+        @app_commands.checks.has_permissions(administrator=True)
+        async def add_affliction(interaction: discord.Interaction, name: str, description: str,
+                                 rarity: app_commands.Choice[str], is_minor: bool = False):
+            # Check if the affliction already exists
+            if self._if_affliction_exists(name, interaction.guild_id):
+                await interaction.response.send_message(f"Affliction '{name}' already exists.", ephemeral=True)
+                return
+
+            new_affliction = Affliction(name=name, description=description, rarity=rarity.value, is_minor=is_minor)
+            self.afflictions_dict[interaction.guild_id].append(new_affliction)
+            self._save_json(interaction.guild_id, "afflictions", self.afflictions_dict[interaction.guild_id],
+                            cls=AfflictionEncoder)
+
+            await interaction.response.send_message(f"Affliction '{name}' added successfully.",
+                                                    embed=AfflictionController.get_embed(new_affliction),
+                                                    ephemeral=True)
+            self.logger.log(f"{interaction.user.name} added affliction {name}", "Bot")
+
+        @group.command(name="remove", description="Removes an affliction from the list")
+        @app_commands.describe(name="Name of the affliction")
+        @app_commands.checks.has_permissions(administrator=True)
+        async def remove_affliction(interaction: discord.Interaction, name: str):
+            # Check if the affliction does not exist
+            if not self._if_affliction_exists(name, interaction.guild_id):
+                await interaction.response.send_message(f"Affliction '{name}' does not exist.", ephemeral=True)
+                return
+
+            affliction_to_remove = self._get_affliction_from_name(name, interaction.guild_id)[0]
+            self.afflictions_dict[interaction.guild_id].remove(affliction_to_remove)
+            self._save_json(interaction.guild_id, "afflictions", self.afflictions_dict[interaction.guild_id],
+                            cls=AfflictionEncoder)
+
+            embed = AfflictionController.get_embed(affliction_to_remove)
+            embed.set_footer(text="Affliction removed")
+
+            await interaction.response.send_message(f"Affliction '{name}' removed successfully.", embed=embed,
+                                                    ephemeral=True)
+            self.logger.log(f"{interaction.user.name} removed affliction {name}", "Bot")
+
+        @group.command(name="edit", description="Edits an affliction from the list")
+        @app_commands.describe(affliction="Current name of the affliction",
+                               name="New name for the affliction",
+                               description="New description of the affliction",
+                               rarity="New rarity of the affliction",
+                               is_minor="Whether the affliction is minor or not. ONLY AFFECTS COMMON RARITY")
+        @app_commands.choices(
+            rarity=[
+                app_commands.Choice(name="Common", value="common"),
+                app_commands.Choice(name="Uncommon", value="uncommon"),
+                app_commands.Choice(name="Rare", value="rare"),
+                app_commands.Choice(name="Ultra Rare", value="ultra rare")
+            ]
+        )
+        @app_commands.checks.has_permissions(administrator=True)
+        async def edit_affliction(interaction: discord.Interaction, affliction: str, name: str = None,
+                                  description: str = None, rarity: app_commands.Choice[str] = None,
+                                  is_minor: bool = False):
+            # Check if the affliction exists
+            if not self._if_affliction_exists(affliction, interaction.guild_id):
+                await interaction.response.send_message(f"Affliction '{affliction}' does not exist.",
+                                                        ephemeral=True)
+                return
+
+            # Check if the new name already exists (if name is being changed)
+            if name and name != affliction and self._if_affliction_exists(name, interaction.guild_id):
+                await interaction.response.send_message(f"Affliction with name '{name}' already exists.",
+                                                        ephemeral=True)
+                return
+
+            affliction_to_edit, index = self._get_affliction_from_name(affliction, interaction.guild_id)
+
+            if name:
+                affliction_to_edit.name = name
+            if description:
+                affliction_to_edit.description = description
+            if rarity:
+                affliction_to_edit.rarity = rarity.value
+            if is_minor:
+                affliction_to_edit.is_minor = is_minor
+
+            self.afflictions_dict[interaction.guild_id][index] = affliction_to_edit
+            self._save_json(interaction.guild_id, "afflictions", self.afflictions_dict[interaction.guild_id],
+                            cls=AfflictionEncoder)
+
+            await interaction.response.send_message(f"Affliction '{affliction}' edited successfully.",
+                                                    embed=AfflictionController.get_embed(affliction_to_edit),
+                                                    ephemeral=True)
+            self.logger.log(f"{interaction.user.name} edited affliction {affliction}", "Bot")
+
+        # --- Handling Errors --- #
+        roll_general.error(self.command_error_handler)
+        roll_minor.error(self.command_error_handler)
+        list_afflictions.error(self.command_error_handler)
+        add_affliction.error(self.command_error_handler)
+        remove_affliction.error(self.command_error_handler)
+        edit_affliction.error(self.command_error_handler)
 
         return group
 
