@@ -726,18 +726,18 @@ class Pagget:
                 ephemeral=False)
 
         @berries_group.command(name="hunt", description="Hunt for some berries")
-        # @app_commands.checks.cooldown(1, 43200, key=lambda i: i.user.id)  # Uncomment to enable cooldown
+        @app_commands.checks.cooldown(1, 43200, key=lambda i: i.user.id)  # Uncomment to enable cooldown
         async def hunt(interaction: discord.Interaction):
             await gather(interaction, "hunt", None)
 
         @berries_group.command(name="steal", description="Attempt to steal berries from the herd")
         @app_commands.describe(target="User to steal from")
-        # @app_commands.checks.cooldown(1, 43200, key=lambda i: i.user.id)  # Uncomment to enable cooldown
+        @app_commands.checks.cooldown(1, 43200, key=lambda i: i.user.id)  # Uncomment to enable cooldown
         async def steal(interaction: discord.Interaction, target: discord.Member):
             await gather(interaction, "steal", target)
 
         @berries_group.command(name="balance", description="Check your berry balance")
-        # @app_commands.checks.cooldown(5, 120, key=lambda i: i.user.id)  # Uncomment to enable cooldown
+        @app_commands.checks.cooldown(5, 120, key=lambda i: i.user.id)  # Uncomment to enable cooldown
         async def balance(interaction: discord.Interaction):
             # Retrieve user's current balance
             current_balance = self._validate_user(interaction.user.id, interaction.guild_id)
@@ -823,7 +823,7 @@ class Pagget:
                 app_commands.Choice(name=name, value=value) for value, name in self.roulette_bet_types.items()
             ]
         )
-        @app_commands.checks.cooldown(1, 60, key=lambda i: i.user.id)  # Uncomment to enable cooldown
+        @app_commands.checks.cooldown(1, 10, key=lambda i: i.user.id)  # Uncomment to enable cooldown
         async def roulette(interaction: discord.Interaction, bet: int, bet_type: str):
             if bet > self._validate_user(interaction.user.id, interaction.guild_id):
                 await interaction.response.send_message(
@@ -844,7 +844,7 @@ class Pagget:
 
         @gambling_group.command(name="slots", description="Play slots with your berries")
         @app_commands.describe(bet="Amount of berries to bet")
-        @app_commands.checks.cooldown(1, 60, key=lambda i: i.user.id)  # Uncomment to enable cooldown
+        @app_commands.checks.cooldown(1, 10, key=lambda i: i.user.id)  # Uncomment to enable cooldown
         async def slots(interaction: discord.Interaction, bet: int):
             if bet > self._validate_user(interaction.user.id, interaction.guild_id):
                 await interaction.response.send_message(
@@ -863,7 +863,7 @@ class Pagget:
 
         @gambling_group.command(name="blackjack", description="Play blackjack with your berries")
         @app_commands.describe(bet="Amount of berries to bet")
-        @app_commands.checks.cooldown(1, 60, key=lambda i: i.user.id)  # Uncomment to enable cooldown
+        @app_commands.checks.cooldown(1, 10, key=lambda i: i.user.id)  # Uncomment to enable cooldown
         async def blackjack(interaction: discord.Interaction, bet: int):
             # If the minimum bet is greater than the bet, or the bet is greater than the user's balance, return an error
             if bet > self._validate_user(interaction.user.id, interaction.guild_id):
