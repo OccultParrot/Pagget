@@ -1,6 +1,8 @@
+import threading
+import time
 from typing import List
 
-from typepairs import Affliction, GatherOutcome, GuildConfig
+from classes.typepairs import *
 
 
 class Data:
@@ -8,6 +10,12 @@ class Data:
     _afflictions: dict[int, List[Affliction]]
     _configs: dict[int, GuildConfig]
     _outcomes: dict[int, List[GatherOutcome]]
+    
+    # Autosave Thread Variables
+    _autosave_thread: threading.Thread = None
+    _autosave_running: bool = False  # Flag to control autosave thread
+    autosave_interval: int = 3600  # Autosave interval in seconds (default: 1 hour)
+    autosave_interval = 10 # TEMP: for testing purposes, remove later
 
     def __init__(self):
         pass
@@ -18,6 +26,36 @@ class Data:
 
     def save(self):
         pass
+    
+    # --- Autosave thread methods --- #
+    def _autosave(self):
+        """ This method is run in a separate thread to autosave data periodically. """
+        self._autosave_running = True
+        
+        while self._autosave_running:
+            self.save()
+            print("Autosave completed at", time.ctime())
+            threading.Event().wait(self.autosave_interval)
+    
+    def start_autosave_thread(self):
+        """ Starts the autosave thread if not already running. """
+        if self._autosave_running:
+            print("Autosave thread is already running.")
+            return
+        print("Starting autosave thread...")
+        self._autosave_thread = threading.Thread(target=self._autosave, daemon=True)
+        self._autosave_thread.start()
+    
+    def stop_autosave_thread(self):
+        """ Stops the autosave thread if it is running. """
+        if not self._autosave_running:
+            print("Autosave thread is not running.")
+            return
+        self._autosave_running = False
+        if self._autosave_thread is not None:
+            self._autosave_thread.join()
+            self._autosave_thread = None
+        print("Autosave thread stopped.")
 
     # --- Methods for getting information --- #
     def get_guild_config(self, guild_id: int) -> GuildConfig:
@@ -53,8 +91,12 @@ class Data:
             self._outcomes[guild_id] = [gather_outcome]
 
     # --- Methods for removing information from dictionaries --- #
-    def remove_affliction(self, index):
+    def remove_affliction(self, index) -> None:
         self._afflictions.pop(index)
 
-    def remove_outcome(self, index):
+    def remove_outcome(self, index) -> None:
         self._outcomes.pop(index)
+
+    def get_user_balance(self, user_id: int) -> int:
+        """ Returns the user's balance, or the guild default if not found. """
+        pass

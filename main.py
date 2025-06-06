@@ -4,6 +4,7 @@ import math
 import os
 import random
 import sys
+import time
 from json import JSONEncoder
 from typing import List, Optional, Literal
 
@@ -13,6 +14,7 @@ import requests
 from discord import app_commands
 from rich.console import Console
 
+from classes.saving import Data
 from classes.afflictions import AfflictionController
 from classes.gambling import Roulette, Blackjack, Slots
 from classes.logger import Logger
@@ -1351,4 +1353,12 @@ class Pagget:
 
 
 if __name__ == "__main__":
-    Pagget().run()
+    # Pagget().run()
+    data = Data()
+    
+    data.start_autosave_thread()
+    
+    for _ in range(60):
+        time.sleep(1)
+    
+    data.stop_autosave_thread()
