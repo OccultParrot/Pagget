@@ -2,6 +2,7 @@ import json
 import os
 import threading
 import time
+from json import JSONEncoder
 from typing import List, Dict, Type, TypeVar
 
 from classes.typepairs import *
@@ -38,16 +39,28 @@ class Data:
     def save(self):
         """ Saves all data to JSON files. """
         print("Saving data...")
-        self._save_json("guild_configs.json", self._configs)
-        self._save_json("afflictions.json", self._afflictions)
+        self._save_json("guild_configs.json", self._configs, GuildConfigEncoder)
+        self._save_json("afflictions.json", self._afflictions, AfflictionEncoder)
         self._save_json("balances.json", self._balances)
-        self._save_json("hunt_outcomes.json", self._hunt_outcomes)
-        self._save_json("steal_outcomes.json", self._steal_outcomes)
+        self._save_json("hunt_outcomes.json", self._hunt_outcomes, GatherOutcomeEncoder)
+        self._save_json("steal_outcomes.json", self._steal_outcomes, GatherOutcomeEncoder)
         print("Data saved successfully.")
 
     @staticmethod
-    def _save_json(directory_name: str, data: dict) -> None:
-        print(data)
+    def _save_json(file_name: str, data: dict, cls: type[JSONEncoder] | None = None) -> None:
+        """ Saves data to JSON file in the specified directory. """
+        file_path = os.path.join("data", file_name)
+
+        if not Data._validate_directory(os.path.dirname(file_path)):
+            print(f"Failed to create directory for {file_path}. Data not saved.")
+            return
+
+        with open(file_path, "w") as file:
+            try:
+                json.dump(data, file, indent=4, cls=cls)
+                print(f"Data saved to {file_path}: {len(data)} entries.")
+            except (IOError, TypeError) as e:
+                print(f"Error saving JSON to {file_path}: {e}")
 
     @staticmethod
     def _load_json(file_name: str, value_type: Type[T]) -> Dict[int, T]:
@@ -61,7 +74,7 @@ class Data:
         with open(file_path, "r") as file:
             try:
                 raw_data = json.load(file)
-                print(f"Loaded data from {file_path}: {raw_data}")
+                print(f"Loaded data from {file_path}: {len(raw_data)} entries.")
 
                 # Convert the raw data to the expected format
                 typed_data: Dict[int, T] = {}
@@ -142,20 +155,35 @@ class Data:
 
     # --- Methods for editing information --- #
     def set_guild_config(self, guild_id: int, config: GuildConfig) -> bool:
-        pass
+        if guild_id in self._configs:
+            self._configs[guild_id] = config
+            return True
+        else:
+            print(f"Guild ID {guild_id} not found in configs.")
+            return False
 
     def set_affliction_list(self, guild_id: int, afflictions: List[Affliction]) -> bool:
-        pass
+        if guild_id in self._afflictions:
+            self._afflictions[guild_id] = afflictions
+            return True
+        else:
+            print(f"Guild ID {guild_id} not found in afflictions.")
+            return False
 
     def set_gather_outcome_list(self, guild_id: int, gather_outcomes: List[GatherOutcome]) -> bool:
-        pass
+        if guild_id in self._hunt_outcomes:
+            self._hunt_outcomes[guild_id] = gather_outcomes
+            return True
+        else:
+            print(f"Guild ID {guild_id} not found in hunt outcomes.")
+            return False
 
     # --- Methods for appending information to dictionaries --- #
-    def append_affliction(self, guild_id: int, affliction: Affliction) -> None:
+    def append_affliction(self, guild_id: int, new_affliction: Affliction) -> None:
         if self._afflictions[guild_id]:
-            self._afflictions[guild_id].append(affliction)
+            self._afflictions[guild_id].append(new_affliction)
         else:
-            self._afflictions[guild_id] = [affliction]
+            self._afflictions[guild_id] = [new_affliction]
 
     def append_hunt_outcome(self, guild_id: int, hunt_outcome: GatherOutcome) -> None:
         if self._hunt_outcomes[guild_id]:
@@ -181,7 +209,7 @@ class Data:
 
     def get_user_balance(self, user_id: int) -> int:
         """ Returns the user's balance, or the guild default if not found. """
-        pass
+        return self._balances.get(user_id, 0)
 
     # --- Methods for validating information --- #
     @staticmethod
