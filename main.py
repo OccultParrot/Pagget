@@ -1356,6 +1356,8 @@ if __name__ == "__main__":
     # Pagget().run()
     data = Data()
     
+    data.load()
+    
     data.start_autosave_thread()
     
     for _ in range(60):
