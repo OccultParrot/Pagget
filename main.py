@@ -14,11 +14,11 @@ import requests
 from discord import app_commands
 from rich.console import Console
 
-from classes.saving import Data
 from classes.afflictions import AfflictionController
 from classes.gambling import Roulette, Blackjack, Slots
 from classes.logger import Logger
 from classes.permissions import has_admin_check
+from classes.saving import Data
 from classes.typepairs import Affliction, AfflictionEncoder, GuildConfig, GuildConfigEncoder, GatherOutcome, \
     GatherOutcomeEncoder
 
@@ -1355,12 +1355,12 @@ class Pagget:
 if __name__ == "__main__":
     # Pagget().run()
     data = Data()
-    
+
     data.load()
-    
+
     data.start_autosave_thread()
-    
+
     for _ in range(60):
         time.sleep(1)
-    
+
     data.stop_autosave_thread()
