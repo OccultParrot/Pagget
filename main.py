@@ -85,7 +85,7 @@ def get_outcome_embed(gather_type: Literal["hunt", "steal"], outcome: GatherOutc
     embed = discord.Embed(
         title=f"Successful {gather_type.title()}!" if outcome.value > 0 else f"Failed {gather_type.title()}!",
         description=outcome.description.format(target=target.display_name.split(' |')[
-            0] if target else "", value=outcome.value) + f"{f'\n-# Target: {target.display_name}\n' if target else ''}",
+            0] if target else "", value=abs(outcome.value)) + f"{f'\n-# Target: {target.display_name}\n' if target else ''}",
         color=get_outcome_color(outcome.value)
     )
     embed.set_author(name=interaction.user.display_name, icon_url=interaction.user.avatar.url)
@@ -695,6 +695,11 @@ class Pagget:
 
             # If we steal, we need to remove the berries from the target's balance, but cant put them in negatives
             if gather_type == "steal" and target:
+                if target.id == interaction.user.id:
+                    await interaction.response.send_message(
+                        "You cannot steal from yourself! Try hunting instead.",
+                        ephemeral=True)
+                    return
                 target_balance = self._validate_user(target.id, interaction.guild_id)
                 if target_balance <= 0:
                     await interaction.response.send_message(
