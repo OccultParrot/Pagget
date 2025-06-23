@@ -1,5 +1,4 @@
 import atexit
-import json
 import math
 import os
 import random
@@ -57,7 +56,8 @@ def get_outcome_embed(gather_type: Literal["hunt", "steal"], outcome: GatherOutc
     embed = discord.Embed(
         title=f"Successful {gather_type.title()}!" if outcome.value > 0 else f"Failed {gather_type.title()}!",
         description=outcome.description.format(target=target.display_name.split(' |')[
-            0] if target else "", value=abs(outcome.value)) + f"{f'\n-# Target: {target.display_name}\n' if target else ''}",
+            0] if target else "", value=abs(
+            outcome.value)) + f"{f'\n-# Target: {target.display_name}\n' if target else ''}",
         color=get_outcome_color(outcome.value)
     )
     embed.set_author(name=interaction.user.display_name, icon_url=interaction.user.avatar.url)
@@ -414,7 +414,7 @@ class Pagget:
 
             self.data.set_user_balance(interaction.user.id,
                                        self.data.get_user_balance(interaction.user.id) + outcome.value)
- 
+
             await interaction.response.send_message(
                 embed=get_outcome_embed(gather_type, outcome, old_balance,
                                         self.data.get_user_balance(interaction.user.id),
@@ -594,7 +594,7 @@ class Pagget:
         @self.client.event
         async def on_ready():
             # Clear all commands and re-sync
-            
+
             self.console.clear()
             self.console.rule(f"[bold]{self.client.user.name}[/]")  # Added bold for emphasis
 
@@ -735,7 +735,7 @@ class Pagget:
         @self.client.event
         async def on_message(message: discord.Message):
             favored_ones = [767047725333086209, 953401260306989118, 757757494192767017]
-            
+
             love_responses = [
                 ":heart:",
                 "Anything for you pookie :para_love:",
@@ -745,16 +745,14 @@ class Pagget:
                 "<:para_sparkle:1349157954603061299>",
                 "<:para_cool:1349156483564310629>"
             ]
-            
+
             hate_responses = [
                 ":sob:",
                 "<:para_sweat:1349157654433370174>",
                 "<:para_sob:1349156486529421352>",
-                "<:para_angy:1349156485044895774>"
+                "<:para_angy:1349156485044895774>",
+                "<:para_tears:1349156487976587304>"
             ]
-            
-            for emoji in message.guild.emojis:
-                print(emoji.name)
 
             bless_responses = [
                 "{name}, I bless you with {blessing} berries... and stuff :/",
@@ -823,7 +821,7 @@ class Pagget:
                         except ValueError:
                             await message.channel.send(
                                 f"{self._name_from_user(self._get_user_from_id(blessed_one, message.guild))}, I bless you with {blessing}")
-                
+
                 # Helpful for seeing how many berries people have
                 if "list berries" in message.content.lower():
                     channel = message.channel
@@ -833,7 +831,7 @@ class Pagget:
                             if user.id == key:
                                 send += f"{user.display_name.split(" |")[0]} has {self.data.balances[key]} berries\n"
                     await channel.send(send)
-                    
+
                 for mean_word in ["suck", "die", "bozo", "loser", "stupid"]:
                     if mean_word in message.content.lower() and "pagget" in message.content.lower():
                         channel = message.channel
@@ -899,89 +897,6 @@ class Pagget:
             for sub_item in sorted_sub_items:
                 self._print_command_item_recursive(sub_item, child_base_indent_str, current_full_path_parts)
 
-    def _roll_for_afflictions(self, guild_id: int, is_minor: bool = False) -> List[Affliction]:
-        """
-        Roll for afflictions based on the configured chance and rarity.
-        
-        Returns:
-            A list of afflictions the character has
-        """
-        result = []
-        available_afflictions = self.data.get_affliction_list(guild_id).copy()
-
-        # Roll for each possible affliction
-        for _ in range(len(self.data.get_affliction_list(guild_id))):
-            if not available_afflictions:
-                break
-
-            # Check if we get any affliction at all
-            if random.random() < (
-                    self.data.get_guild_config(guild_id).minor_chance if is_minor else self.data.get_guild_config(
-                        guild_id).chance) / 100:
-                # Group remaining afflictions by rarity
-                commons = [a for a in available_afflictions if a.rarity.lower() == "common"]
-                uncommons = [a for a in available_afflictions if a.rarity.lower() == "uncommon"]
-                rares = [a for a in available_afflictions if a.rarity.lower() == "rare"]
-                ultra_rares = [a for a in available_afflictions if a.rarity.lower() == "ultra rare"]
-
-                if is_minor:
-                    commons = [a for a in commons if a.is_minor]
-                    rarity_groups = [commons]
-                    rarity_weights = [100]
-                else:
-                    # Rarity groups and their weights
-                    rarity_groups = [commons, uncommons, rares, ultra_rares]
-                    rarity_weights = [60, 25, 10, 5]
-
-                if sum(rarity_weights) != 100:
-                    self.console.print("[red]Error: Rarity weights must sum to 100")
-                    self.logger.log("[red]Error: Rarity weights must sum to 100")
-                    return []
-
-                # Filter out empty groups
-                non_empty_groups = []
-                non_empty_weights = []
-
-                for group, weight in zip(rarity_groups, rarity_weights):
-                    if group:
-                        non_empty_groups.append(group)
-                        non_empty_weights.append(weight)
-
-                # Select a group based on rarity weights, then select random affliction from that group
-                if non_empty_groups:
-                    selected_group = random.choices(non_empty_groups, weights=non_empty_weights, k=1)[0]
-                    selected_affliction = random.choice(selected_group)
-
-                    result.append(selected_affliction)
-                    available_afflictions.remove(selected_affliction)
-                else:
-                    # No afflictions left in any rarity group
-                    break
-            else:
-                # Failed the roll, stop adding afflictions
-                break
-
-        return result
-
-    def _find_affliction(self, search_term: str, guild_id: int) -> Optional[Affliction]:
-        """
-        Find an affliction by a search term.
-        
-        Args:
-            search_term: The term to search for
-            
-        Returns:
-            The full affliction string if found, None otherwise
-        """
-        search_term = search_term.lower()
-
-        for affliction in self.data.get_affliction_list(guild_id):
-            name = affliction.name.lower()
-            if search_term in name or search_term == name.split()[0]:
-                return affliction
-
-        return None
-
     def _roll_for_gathering_occurrence(self, guild_id: int, gather_type: Literal["hunt", "steal"]) -> GatherOutcome:
         """
         Roll for a hunting occurrence based on the configured chance.
@@ -1025,28 +940,6 @@ class Pagget:
                 self.logger.log(f"Error creating directory: {e}", "Json")
                 return False  # Return if directory creation fails
         return True
-
-    def _validate_json_load(self, directory: str, path: str, default_path: str) -> tuple[str, bool]:
-        if not self._validate_directory(directory):
-            return path, False
-
-        if not os.path.exists(path):
-            self.console.print(f"[yellow]Warning: {path} not found. Using default values.")
-            self.logger.log(f"{path} not found. Using default values.", "Json")
-            path = default_path
-
-            if not os.path.exists(path):
-                self.console.print(f"[yellow]Warning: Default file not found. Creating empty file")
-                self.logger.log(f"Default file not found. Creating empty file", "Json")
-                try:
-                    with open(path, 'w') as f:
-                        json.dump([], f)
-                except Exception as e:
-                    self.console.print(f"[red bold]Error creating default file: {e}")
-                    self.logger.log(f"Error creating default file: {e}", "Json")
-                    return path, False
-
-        return path, True
 
     def _validate_user(self, user_id: int, guild_id: int) -> int:
         """ Returns the balance of the user, and sets users balance to the guilds starting balance from configs """
