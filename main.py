@@ -404,10 +404,12 @@ class Pagget:
 
                 self.data.set_user_balance(target.id, target_new_balance)
 
-            self.data.set_user_balance(interaction.guild_id, self.data.get_user_balance(interaction.guild_id) + outcome.value)
+            self.data.set_user_balance(interaction.guild_id,
+                                       self.data.get_user_balance(interaction.guild_id) + outcome.value)
 
             await interaction.response.send_message(
-                embed=get_outcome_embed(gather_type, outcome, old_balance, self.data.get_user_balance(interaction.guild_id),
+                embed=get_outcome_embed(gather_type, outcome, old_balance,
+                                        self.data.get_user_balance(interaction.guild_id),
                                         target if target else None, interaction),
                 ephemeral=False)
 
@@ -457,7 +459,7 @@ class Pagget:
             # Deduct berries from the user's balance
             user_balance = self.data.get_user_balance(interaction.user.id)
             recipient_balance = self.data.get_user_balance(user.id)
-            
+
             self.data.set_user_balance(interaction.user.id, user_balance - amount)
             self.data.set_user_balance(user.id, recipient_balance + amount)
 
@@ -510,7 +512,7 @@ class Pagget:
                 await interaction.response.send_message(
                     f"You bet *{bet}*, but the minimum bet is **{self.data.get_guild_config(interaction.guild_id).minimum_bet}**.")
                 return
-            
+
             balance = self.data.get_user_balance(interaction.user.id)
 
             self.data.set_user_balance(interaction.user.id, balance - bet)
