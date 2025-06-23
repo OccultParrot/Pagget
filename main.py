@@ -803,6 +803,16 @@ class Pagget:
                         except ValueError:
                             await message.channel.send(
                                 f"{self._name_from_user(self._get_user_from_id(blessed_one, message.guild))}, I bless you with {blessing}")
+                
+                # Helpful for seeing how many berries people have
+                if "list berries" in message.content.lower():
+                    channel = message.channel
+                    send = ""
+                    for key in self.data.balances.keys():
+                        for user in message.guild.members:
+                            if user.id == key:
+                                send += f"{user.display_name.split(" |")[0]} has {self.data.balances[key]} berries\n"
+                    await channel.send(send)
 
     @staticmethod
     def _name_from_user(user: discord.User | discord.Member) -> str:
