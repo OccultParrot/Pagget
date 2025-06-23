@@ -15,7 +15,7 @@ class Data:
     # Data Directories
     _afflictions: dict[int, List[Affliction]]  # Afflictions, indexed by guild ID
     _configs: dict[int, GuildConfig]  # Guild configurations, indexed by guild ID
-    _balances: dict[int, int]  # User balances, indexed by user ID
+    balances: dict[int, int]  # User balances, indexed by user ID
     _hunt_outcomes: dict[int, List[GatherOutcome]]  # Hunt outcomes, indexed by guild ID
     _steal_outcomes: dict[int, List[GatherOutcome]]  # Steal outcomes, indexed by guild ID
 
@@ -23,7 +23,6 @@ class Data:
     _autosave_thread: threading.Thread = None
     _autosave_running: bool = False  # Flag to control autosave thread
     autosave_interval: int = 1800  # Autosave interval in seconds (default: 1/2 hour)
-    autosave_interval = 10  # TEMP: for testing purposes, remove later
 
     def __init__(self):
         self._autosave_stop_event = threading.Event()
@@ -33,7 +32,7 @@ class Data:
     def load(self):
         self._configs = self._load_json("guild_configs.json", GuildConfig)
         self._afflictions = self._load_json("afflictions.json", List[Affliction])
-        self._balances = self._load_json("balances.json", int)
+        self.balances = self._load_json("balances.json", int)
         self._hunt_outcomes = self._load_json("hunt_outcomes.json", List[GatherOutcome])
         self._steal_outcomes = self._load_json("steal_outcomes.json", List[GatherOutcome])
 
@@ -42,7 +41,7 @@ class Data:
         print("Saving data...")
         self._save_json("guild_configs.json", self._configs, GuildConfigEncoder)
         self._save_json("afflictions.json", self._afflictions, AfflictionEncoder)
-        self._save_json("balances.json", self._balances)
+        self._save_json("balances.json", self.balances)
         self._save_json("hunt_outcomes.json", self._hunt_outcomes, GatherOutcomeEncoder)
         self._save_json("steal_outcomes.json", self._steal_outcomes, GatherOutcomeEncoder)
         print("Data saved successfully.")
@@ -159,7 +158,7 @@ class Data:
 
     def get_user_balance(self, user_id: int) -> int:
         """ Returns the user's balance, or the guild default if not found. """
-        return self._balances.get(user_id, 0)
+        return self.balances.get(user_id, 0)
 
     # --- Methods for editing information --- #
     def set_guild_config(self, guild_id: int, config: GuildConfig) -> bool:
@@ -187,7 +186,7 @@ class Data:
             return False
 
     def set_user_balance(self, user_id: int, new_balance: int):
-        self._balances[user_id] = new_balance
+        self.balances[user_id] = new_balance
 
     # --- Methods for appending information to dictionaries --- #
     def append_affliction(self, guild_id: int, new_affliction: Affliction) -> None:
