@@ -417,7 +417,7 @@ class Pagget:
 
             await interaction.response.send_message(
                 embed=get_outcome_embed(gather_type, outcome, old_balance,
-                                        self.data.get_user_balance(interaction.guild_id),
+                                        self.data.get_user_balance(interaction.user.id),
                                         target if target else None, interaction),
                 ephemeral=False)
 
