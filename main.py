@@ -32,7 +32,7 @@ async def read_error(interaction: List[discord.Interaction], error: app_commands
         await interaction[0].response.send_message(error, ephemeral=True)
     else:
         logger.log(f"Error while processing command: {error}", "Bot")
-        await interaction[0].response.send_message("An error occurred while rolling for afflictions",
+        await interaction[0].response.send_message("An error occurred while running the command",
                                                    ephemeral=True)
 
 
@@ -101,7 +101,6 @@ def organise_rarities(dictionary: dict[int, List[Affliction | GatherOutcome]], i
 
 class Pagget:
     """Main bot class to handle Discord interactions and affliction management."""
-    balances_dict: dict[int, int]
 
     def __init__(self):
         """Initialize the bot with required configurations and load afflictions."""
@@ -133,6 +132,10 @@ class Pagget:
         intents.message_content = True
         self.client = discord.Client(intents=intents)
         self.tree = app_commands.CommandTree(self.client)
+
+        # Clear any existing commands if we're syncing
+        if any(arg == "--sync" for arg in sys.argv):
+            self.tree.clear_commands(guild=None)  # Clear before registering
 
         # Register commands and events
         self._register_commands()
@@ -222,13 +225,13 @@ class Pagget:
 
         @group.command(name="roll", description="Rolls for afflictions affecting your dinosaur")
         @app_commands.describe(dino="Your dinosaur's name")
-        # @app_commands.checks.cooldown(1, 3600, key=lambda i: i.user.id)  # Uncomment to enable cooldown
+        @app_commands.checks.cooldown(1, 3600, key=lambda i: i.user.id)  # Uncomment to enable cooldown
         async def roll_general(interaction: discord.Interaction, dino: str):
             await roll(interaction, dino, self.data.get_guild_config(interaction.guild_id).chance, False)
 
         @group.command(name="roll-minor", description="Rolls for minor afflictions affecting your dinosaur")
         @app_commands.describe(dino="Your dinosaur's name")
-        # @app_commands.checks.cooldown(1, 3600, key=lambda i: i.user.id)  # Uncomment to enable cooldown
+        @app_commands.checks.cooldown(1, 3600, key=lambda i: i.user.id)  # Uncomment to enable cooldown
         async def roll_minor(interaction: discord.Interaction, dino: str):
             await roll(interaction, dino, self.data.get_guild_config(interaction.guild_id).chance, True)
 
@@ -414,18 +417,18 @@ class Pagget:
                 ephemeral=False)
 
         @berries_group.command(name="hunt", description="Hunt for some berries")
-        # @app_commands.checks.cooldown(1, 43200, key=lambda i: i.user.id)  # Uncomment to enable cooldown
+        @app_commands.checks.cooldown(1, 43200, key=lambda i: i.user.id)  # Uncomment to enable cooldown
         async def hunt(interaction: discord.Interaction):
             await gather(interaction, "hunt", None)
 
         @berries_group.command(name="steal", description="Attempt to steal berries from the herd")
         @app_commands.describe(target="User to steal from")
-        # @app_commands.checks.cooldown(1, 43200, key=lambda i: i.user.id)  # Uncomment to enable cooldown
+        @app_commands.checks.cooldown(1, 43200, key=lambda i: i.user.id)  # Uncomment to enable cooldown
         async def steal(interaction: discord.Interaction, target: discord.Member):
             await gather(interaction, "steal", target)
 
         @berries_group.command(name="balance", description="Check your berry balance")
-        # @app_commands.checks.cooldown(5, 120, key=lambda i: i.user.id)  # Uncomment to enable cooldown
+        @app_commands.checks.cooldown(5, 120, key=lambda i: i.user.id)  # Uncomment to enable cooldown
         async def balance(interaction: discord.Interaction):
             # Retrieve user's current balance
             current_balance = self._validate_user(interaction.user.id, interaction.guild_id)
@@ -560,7 +563,7 @@ class Pagget:
             user_balance = self.data.get_user_balance(interaction.user.id)
             self.data.set_user_balance(interaction.user.id, user_balance - bet)
 
-            game = Blackjack(interaction.user, bet, self.balances_dict)
+            game = Blackjack(interaction.user, bet, self.data.balances)
             await game.run(interaction)
 
         @roulette.error
@@ -585,6 +588,8 @@ class Pagget:
 
         @self.client.event
         async def on_ready():
+            # Clear all commands and re-sync
+            
             self.console.clear()
             self.console.rule(f"[bold]{self.client.user.name}[/]")  # Added bold for emphasis
 
@@ -599,10 +604,6 @@ class Pagget:
                 self.console.print(f"  • [green]{guild.name}[/] ({guild.id}) - {member_str}")
                 self.logger.log(f"    * Guild: {guild.name} ({guild.id}) {member_str}", "Bot")
 
-            # Load data and start autosaving
-            self.data.load()
-            self.data.start_autosave_thread()
-
             # If syncing is enabled, sync the command tree
             # NOTE: Using 'bot.tree' in the guild sync section, ensure 'bot' is defined or use 'self.tree' consistently
             if any(arg == "--sync" for arg in sys.argv):
@@ -611,8 +612,6 @@ class Pagget:
                 self.console.print("[yellow]Warning: Avoid syncing commands too often to avoid rate limits...[/]")
                 self.console.print("[yellow]Warning: Syncing commands may take a while...[/]")
                 try:
-                    # Clear all commands and sync globally
-                    self.tree.clear_commands(guild=None, type=None)
                     await self.tree.sync()
                     self.console.print("[green]Command tree synced globally[/]")
                     self.logger.log("Command tree synced globally", "Bot")
@@ -720,6 +719,10 @@ class Pagget:
                 self.console.print("  [yellow]No application commands found or registered.[/]")
                 self.logger.log("No application commands found or registered.", "Bot")
 
+            # Load data and start autosaving
+            self.data.load()
+            self.data.start_autosave_thread()
+
             # Final ready message
             self.console.print("\n[bold green]Bot is ready and online![/]")
             self.logger.log("Bot is ready and online!", "Bot")
@@ -742,7 +745,7 @@ class Pagget:
                 if "berries pls" in message.content.lower():
                     if random.random() < 0.5:
                         amount = random.randint(1, 1000)
-                        self.balances_dict[message.author.id] = + amount
+                        self.data.balances[message.author.id] = + amount
                         await message.channel.send(f"Ok poor boy, I'll give you *{amount}* berries")
                     else:
                         await message.channel.send(f"Bro, stop being such a whiner. Just work :skull:")
@@ -788,7 +791,7 @@ class Pagget:
                             ]
 
                             self._validate_user(blessed_one, message.guild.id)
-                            self.balances_dict[blessed_one] += blessing
+                            self.data.balances[blessed_one] += blessing
 
                             await message.channel.send(random.choice(blessing_messages).format(
                                 name=self._name_from_user(self._get_user_from_id(blessed_one, message.guild)),
@@ -1001,10 +1004,10 @@ class Pagget:
 
     def _validate_user(self, user_id: int, guild_id: int) -> int:
         """ Returns the balance of the user, and sets users balance to the guilds starting balance from configs """
-        if user_id in self.balances_dict:
-            return self.balances_dict[user_id]
+        if user_id in self.data.balances:
+            return self.data.balances[user_id]
 
-        self.balances_dict[user_id] = self.data.get_guild_config(guild_id).starting_pay
+        self.data.balances[user_id] = self.data.get_guild_config(guild_id).starting_pay
         self.console.print("User balance created:", user_id)
         self.logger.log(f"User balance created: {user_id}", "Bot")
         return self.data.get_guild_config(guild_id).starting_pay
