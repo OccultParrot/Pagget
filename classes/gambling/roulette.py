@@ -4,6 +4,7 @@ from typing import Optional, Literal, List
 
 import discord
 
+from classes.saving import Data
 
 class Player:
     def __init__(self, user: discord.User, bet: int, bet_type: str):
@@ -66,7 +67,7 @@ class RouletteJoinView(discord.ui.View):
         self.last_interaction = interaction
         self.last_message_id = interaction.message.id
         await interaction.response.send_modal(BetAmountModal(self._submit_amount_callback, self.values,
-                                                             self.roulette_instance.users_dict[interaction.user.id],
+                                                             self.roulette_instance.data.get_user_balance(interaction.user.id),
                                                              self.roulette_instance.min_bet))
 
     async def _submit_amount_callback(self):
@@ -134,7 +135,8 @@ class RouletteJoinView(discord.ui.View):
     async def _submit_callback(self, interaction: discord.Interaction):
         # Add the player to the game
         player = Player(interaction.user, int(self.values["bet_amount"]), self.values["bet_type"])
-        self.roulette_instance.users_dict[interaction.user.id] -= player.bet
+        player_balance = self.roulette_instance.data.get_user_balance(interaction.user.id)
+        self.roulette_instance.data.set_user_balance(interaction.user.id, player_balance - player.bet)
         self.roulette_instance.players.append(player)
 
         # Update the original message
@@ -184,17 +186,17 @@ class BetAmountModal(discord.ui.Modal):
 
 class Roulette:
     def __init__(self, host: discord.User, hosts_bet: int, hosts_bet_type: str, bet_types: dict[str, str],
-                 users_dict: dict[int, int], verify_callback: callable, min_bet: int):
+                 data: Data, verify_callback: callable, min_bet: int):
         """
         The class that is used to play roulette.
         :param host: The user object that is the person that ran the original command
         :param hosts_bet: The hosts bet
         :param hosts_bet_type: The option that host bet on
         :param bet_types: The bet types that are available to the players
-        :param users_dict: The list of users and balances in the database
+        :param data: The data class that the root bot uses for saving data
         :param min_bet: The minimum bet (Per Server)
         """
-        self.users_dict = users_dict
+        self.data = data
         self.host = Player(host, hosts_bet, hosts_bet_type)  # The person that started the game
         self.players: List[Player] = [self.host]
         self.min_bet = min_bet
@@ -338,37 +340,38 @@ class Roulette:
         # Looping through every player
         for player in self.players:
             # if they bet the color
+            player_balance = self.data.get_user_balance(player.user.id)
             if player.bet_type == self.rolled_color:
                 player.calculate_payout()
-                self.users_dict[player.user.id] += player.payout
+                self.data.set_user_balance(player.user.id, player_balance + player.payout)
             # If they bet even and it was even
             elif player.bet_type == "even" and self.rolled_number % 2 == 0:
                 player.calculate_payout()
-                self.users_dict[player.user.id] += player.payout
+                self.data.set_user_balance(player.user.id, player_balance + player.payout)
             # If they bet odd and it was odd
             elif player.bet_type == "odd" and self.rolled_number % 2 != 0:
                 player.calculate_payout()
-                self.users_dict[player.user.id] += player.payout
+                self.data.set_user_balance(player.user.id, player_balance + player.payout)
             # If they bet low, and it was in the low range (lower than 19)
             elif player.bet_type == "low" and self.rolled_number <= 18:
                 player.calculate_payout()
-                self.users_dict[player.user.id] += player.payout
+                self.data.set_user_balance(player.user.id, player_balance + player.payout)
             # If they bet high, and it was in the high range (higher than 18)
             elif player.bet_type == "high" and self.rolled_number > 18:
                 player.calculate_payout()
-                self.users_dict[player.user.id] += player.payout
+                self.data.set_user_balance(player.user.id, player_balance + player.payout)
             # If they bet dozen1, and it was in the first dozen (1-12)
             elif player.bet_type == "dozen1" and 1 <= self.rolled_number <= 12:
                 player.calculate_payout()
-                self.users_dict[player.user.id] += player.payout
+                self.data.set_user_balance(player.user.id, player_balance + player.payout)
             # If they bet dozen2, and it was in the second dozen (13-24)
             elif player.bet_type == "dozen2" and 13 <= self.rolled_number <= 24:
                 player.calculate_payout()
-                self.users_dict[player.user.id] += player.payout
+                self.data.set_user_balance(player.user.id, player_balance + player.payout)
             # If they bet dozen3, and it was in the third dozen (25-36)
             elif player.bet_type == "dozen3" and 25 <= self.rolled_number <= 36:
                 player.calculate_payout()
-                self.users_dict[player.user.id] += player.payout
+                self.data.set_user_balance(player.user.id, player_balance + player.payout)
             # If their bet was not right, set their payout to a negative value. Unused if negative, but may be used later if I want to
             else:
                 player.payout = - player.bet
@@ -397,7 +400,8 @@ class Roulette:
     async def _cancel_callback(self, interaction: discord.Interaction):
         for player in self.players:
             if interaction.user.id == player.user.id:
-                self.users_dict[player.user.id] += player.bet
+                player_balance = self.data.get_user_balance(player.user.id)
+                self.data.set_user_balance(player.user.id, player_balance + player.bet)
                 self.players.remove(player)
                 await interaction.response.send_message("You left the game. Bet refunded", ephemeral=True)
                 await self.update_message("queue", interaction)

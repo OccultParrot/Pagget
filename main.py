@@ -4,8 +4,6 @@ import math
 import os
 import random
 import sys
-import time
-from json import JSONEncoder
 from typing import List, Optional, Literal
 
 import discord
@@ -19,8 +17,7 @@ from classes.gambling import Roulette, Blackjack, Slots
 from classes.logger import Logger
 from classes.permissions import has_admin_check
 from classes.saving import Data
-from classes.typepairs import Affliction, AfflictionEncoder, GuildConfig, GuildConfigEncoder, GatherOutcome, \
-    GatherOutcomeEncoder
+from classes.typepairs import Affliction, GuildConfig, GatherOutcome
 
 # Constants
 DATA_DIRECTORY = "data"
@@ -104,11 +101,6 @@ def organise_rarities(dictionary: dict[int, List[Affliction | GatherOutcome]], i
 
 class Pagget:
     """Main bot class to handle Discord interactions and affliction management."""
-
-    afflictions_dict: dict[int, List[Affliction]]
-    guild_configs: dict[int, GuildConfig]
-    hunt_outcomes_dict: dict[int, List[GatherOutcome]]
-    steal_outcomes_dict: dict[int, List[GatherOutcome]]
     balances_dict: dict[int, int]
 
     def __init__(self):
@@ -119,6 +111,9 @@ class Pagget:
         # Setup console and logging
         self.console = Console()
         self.logger = Logger(LOG_FILE)
+
+        # Data class
+        self.data: Data = Data()
 
         self.roulette_bet_types: dict[str, str] = {
             "red": "Red",
@@ -143,190 +138,6 @@ class Pagget:
         self._register_commands()
         self._register_events()
 
-    def _load_json_afflictions(self, guild_id: int) -> List[Affliction]:
-        """
-        Load afflictions from a JSON file.
-        
-        :return: 
-            A list of Affliction objects
-        """
-
-        affliction_directory, affliction_path = get_paths("afflictions", guild_id)
-
-        affliction_path, valid = self._validate_json_load(affliction_directory, affliction_path,
-                                                          "defaults/afflictions.default.json")
-        if not valid:
-            return []
-
-        try:
-            with open(affliction_path, 'r') as f:
-                raw_data = json.load(f)
-
-                afflictions: List[Affliction] = []
-                for item in raw_data:
-                    if not all(key in item for key in ["name", "description", "rarity"]):
-                        self.console.print(f"[yellow]Warning: Skipping invalid affliction entry: {item}")
-                        self.logger.log(f"Skipping invalid affliction entry: {item}", "Json")
-                        continue
-
-                    affliction: Affliction = Affliction.from_dict(item)
-                    afflictions.append(affliction)
-
-                self.console.print(f"[green]Loaded {len(afflictions)} afflictions from {affliction_path}")
-                return afflictions
-
-        except FileNotFoundError:
-            self.console.print(f"[red bold]Error: {affliction_path} not found")
-            self.logger.log(f"Error: {affliction_path} not found", "Json")
-            return []  # Return empty list if file not found
-
-        except json.JSONDecodeError:
-            self.console.print(f"[red bold]Error: {affliction_path} is not a valid JSON file")
-            self.logger.log(f"Error: {affliction_path} is not a valid JSON file", "Json")
-            return []  # Return empty list instead of exiting
-
-        except Exception as e:
-            self.console.print(f"[red bold]Error loading afflictions: {e}")
-            self.logger.log(f"Error loading afflictions: {e}", "Json")
-            return []  # Return empty list instead of exiting
-
-    def _load_json_configs(self, guild_id: int) -> GuildConfig:
-        """ Loads the config for the guild from a JSON file """
-        config_directory = os.path.join(DATA_DIRECTORY, "guild_configs")
-        config_path = os.path.join(config_directory, f"{guild_id}.json")
-
-        # Create directory if it doesn't exist
-        if not self._validate_directory(config_directory):
-            return GuildConfig("Parasaurolophus")  # Return default species if directory creation fails
-
-        # Return default species if guild-specific file doesn't exist
-        if not os.path.isfile(config_path):
-            self.console.print(f"[yellow]Warning: {config_path} not found. Using default configs.")
-            self.logger.log(f"{config_path} not found. Using default configs.", "Json")
-            return GuildConfig("Parasaurolophus")
-
-        try:
-            with open(config_path, 'r') as f:
-                raw_data = json.load(f)
-                guild_config = GuildConfig.from_dict(raw_data)
-                self.console.print(f"[green]Loaded configs from {config_path}")
-                return guild_config
-
-        except FileNotFoundError:
-            self.console.print(f"[red bold]Error: {config_path} not found")
-            self.logger.log(f"Error: {config_path} not found", "Json")
-            return GuildConfig("Parasaurolophus")  # Return default species if file not found
-
-    def _load_json_hunt_outcomes(self, guild_id: int) -> List[GatherOutcome]:
-        """
-        Load hunt outcomes from a JSON file.
-        
-        :return: 
-            A list of HuntOutcome objects
-        """
-        outcome_directory, outcome_path = get_paths("hunt_outcomes", guild_id)
-        outcome_path, valid = self._validate_json_load(outcome_directory, outcome_path,
-                                                       "defaults/hunt_outcomes.default.json")
-        if not valid:
-            return []
-
-        try:
-            with open(outcome_path, 'r', encoding="utf-8") as f:
-                raw_data = json.load(f)
-
-                outcomes: List[GatherOutcome] = []
-                for item in raw_data:
-                    if not all(key in item for key in ["rarity", "value", "description"]):
-                        self.console.print(f"[yellow]Warning: Skipping invalid outcome entry: {item}")
-                        self.logger.log(f"Skipping invalid outcome entry: {item}", "Json")
-                        continue
-
-                    outcome: GatherOutcome = GatherOutcome.from_dict(item)
-                    outcomes.append(outcome)
-
-                self.console.print(f"[green]Loaded {len(outcomes)} outcomes from {outcome_path}")
-                return outcomes
-
-        except FileNotFoundError:
-            self.console.print(f"[red bold]Error: {outcome_path} not found")
-            self.logger.log(f"Error: {outcome_path} not found", "Json")
-            return []  # Return empty list if file not found
-
-    def _load_json_steal_outcomes(self, guild_id: int) -> List[GatherOutcome]:
-
-        outcome_directory, outcome_path = get_paths("steal_outcomes", guild_id)
-        outcome_path, valid = self._validate_json_load(outcome_directory, outcome_path,
-                                                       "defaults/steal_outcomes.default.json")
-        if not valid:
-            return []
-
-        try:
-            with open(outcome_path, 'r', encoding="utf-8") as f:
-                raw_data = json.load(f)
-
-                outcomes: List[GatherOutcome] = []
-                for item in raw_data:
-                    if not all(key in item for key in ["rarity", "value", "description"]):
-                        self.console.print(f"[yellow]Warning: Skipping invalid outcome entry: {item}")
-                        self.logger.log(f"Skipping invalid outcome entry: {item}", "Json")
-                        continue
-
-                    outcome: GatherOutcome = GatherOutcome.from_dict(item)
-                    outcomes.append(outcome)
-
-                self.console.print(f"[green]Loaded {len(outcomes)} outcomes from {outcome_path}")
-                return outcomes
-
-        except FileNotFoundError:
-            self.console.print(f"[red bold]Error: {outcome_path} not found")
-            self.logger.log(f"Error: {outcome_path} not found", "Json")
-            return []  # Return empty list if file not found
-
-    def _load_json_balances(self):
-        """
-        Loads everyone's balances from a JSON file.
-        :return: 
-            A dictionary of user IDs and their balances
-        """
-        balances_directory, balances_path = get_paths("balances", 0)
-        balances_path, valid = self._validate_json_load(balances_directory, balances_path,
-                                                        "defaults/balances.default.json")
-        if not valid:
-            return {}  # Return an empty dictionary
-
-        try:
-            with open(balances_path, 'r') as f:
-                raw_data = json.load(f)
-
-                # Ensure raw_data is a dictionary
-                if not isinstance(raw_data, dict):
-                    self.console.print("[yellow]Warning: Balances file is not in dictionary format. Converting...")
-                    raw_data = {}
-                else:
-                    raw_data = {int(key): int(value) for key, value in raw_data.items()}
-
-                return raw_data
-
-        except FileNotFoundError:
-            self.console.print(f"[red bold]Error: {balances_path} not found")
-            self.logger.log(f"Error: {balances_path} not found", "Json")
-            return {}
-
-    def _save_json(self, guild_id: int, directory_name: str, data: any, cls: JSONEncoder | None = None) -> None:
-        directory, path = get_paths(directory_name, guild_id)
-
-        if not self._validate_directory(directory):
-            return
-
-        try:
-            with open(path, 'w') as f:
-                json.dump(data, f, cls=cls, indent=4)
-
-        except Exception as e:
-            self.console.print(f"[red bold]Error saving {directory_name}: {e}")
-            self.logger.log(f"Error saving {directory_name}: {e}", "Json")
-            return
-
     def _register_commands(self):
         """Register all Discord slash commands."""
 
@@ -339,31 +150,32 @@ class Pagget:
         async def set_configs(interaction: discord.Interaction, species: str = None, chance: int = None,
                               minor_chance: bool = None, starting_pay: int = None, minimum_bet: int = None):
             try:
+                guild_config: GuildConfig = self.data.get_guild_config(interaction.guild_id)
+
                 if species is not None:
-                    self.guild_configs[interaction.guild_id].species = species
+                    guild_config.species = species
                 if chance is not None:
-                    self.guild_configs[interaction.guild_id].chance = chance
+                    guild_config.chance = chance
                 if minor_chance is not None:
-                    self.guild_configs[interaction.guild_id].minor_chance = minor_chance
+                    guild_config.minor_chance = minor_chance
                 if starting_pay is not None:
-                    self.guild_configs[interaction.guild_id].starting_pay = starting_pay
+                    guild_config.starting_pay = starting_pay
                 if minimum_bet is not None:
-                    self.guild_configs[interaction.guild_id].minimum_bet = minimum_bet
+                    guild_config.minimum_bet = minimum_bet
+
+                self.data.set_guild_config(interaction.guild_id, guild_config)
 
                 embed = discord.Embed(title=f"{interaction.guild.name}'s Configuration",
                                       description="Guild configuration has been updated.")
-                embed.add_field(name="Species", value=self.guild_configs[interaction.guild_id].species, inline=False)
-                embed.add_field(name="Affliction Chance", value=f"{self.guild_configs[interaction.guild_id].chance}%",
+                embed.add_field(name="Species", value=guild_config.species, inline=False)
+                embed.add_field(name="Affliction Chance", value=f"{guild_config.chance}%",
                                 inline=False)
                 embed.add_field(name="Minor Affliction Chance",
-                                value=f"{self.guild_configs[interaction.guild_id].minor_chance}%", inline=False)
-                embed.add_field(name="Starting Pay", value=f"{self.guild_configs[interaction.guild_id].starting_pay}",
+                                value=f"{guild_config.minor_chance}%", inline=False)
+                embed.add_field(name="Starting Pay", value=f"{guild_config.starting_pay}",
                                 inline=False)
-                embed.add_field(name="Minimum Bet", value=f"{self.guild_configs[interaction.guild_id].minimum_bet}",
+                embed.add_field(name="Minimum Bet", value=f"{guild_config.minimum_bet}",
                                 inline=False)
-
-                self._save_json(interaction.guild_id, "guild_configs", self.guild_configs[interaction.guild_id],
-                                cls=GuildConfigEncoder)
 
                 await interaction.response.send_message(f"Guild configuration updated.", embed=embed, ephemeral=True)
                 self.logger.log(f"{interaction.user.name} updated guild configuration for guild {interaction.guild_id}",
@@ -388,7 +200,8 @@ class Pagget:
         group = app_commands.Group(name="affliction", description="Affliction commands")
 
         async def roll(interaction: discord.Interaction, dino: str, chance: float, is_minor: bool):
-            afflictions = AfflictionController.roll(self.afflictions_dict[interaction.guild_id], chance, is_minor)
+            afflictions = AfflictionController.roll(self.data.get_affliction_list(interaction.guild_id), chance,
+                                                    is_minor)
 
             dino = dino.capitalize()
 
@@ -411,19 +224,20 @@ class Pagget:
         @app_commands.describe(dino="Your dinosaur's name")
         # @app_commands.checks.cooldown(1, 3600, key=lambda i: i.user.id)  # Uncomment to enable cooldown
         async def roll_general(interaction: discord.Interaction, dino: str):
-            await roll(interaction, dino, self.guild_configs[interaction.guild_id].chance, False)
+            await roll(interaction, dino, self.data.get_guild_config(interaction.guild_id).chance, False)
 
         @group.command(name="roll-minor", description="Rolls for minor afflictions affecting your dinosaur")
         @app_commands.describe(dino="Your dinosaur's name")
         # @app_commands.checks.cooldown(1, 3600, key=lambda i: i.user.id)  # Uncomment to enable cooldown
         async def roll_minor(interaction: discord.Interaction, dino: str):
-            await roll(interaction, dino, self.guild_configs[interaction.guild_id].chance, True)
+            await roll(interaction, dino, self.data.get_guild_config(interaction.guild_id).chance, True)
 
         @group.command(name="list", description="Lists all available afflictions")
         @app_commands.describe(page="What page to display")
         async def list_afflictions(interaction: discord.Interaction, page: int = 1):
-            sorted_afflictions = AfflictionController.list_afflictions(self.afflictions_dict[interaction.guild_id],
-                                                                       page)
+            sorted_afflictions = AfflictionController.list_afflictions(
+                self.data.get_affliction_list(interaction.guild_id),
+                page)
 
             length = len(sorted_afflictions)
 
@@ -470,9 +284,7 @@ class Pagget:
                 return
 
             new_affliction = Affliction(name=name, description=description, rarity=rarity.value, is_minor=is_minor)
-            self.afflictions_dict[interaction.guild_id].append(new_affliction)
-            self._save_json(interaction.guild_id, "afflictions", self.afflictions_dict[interaction.guild_id],
-                            cls=AfflictionEncoder)
+            self.data.get_affliction_list(interaction.guild_id).append(new_affliction)
 
             await interaction.response.send_message(f"Affliction '{name}' added successfully.",
                                                     embed=AfflictionController.get_embed(new_affliction),
@@ -489,9 +301,7 @@ class Pagget:
                 return
 
             affliction_to_remove = self._get_affliction_from_name(name, interaction.guild_id)[0]
-            self.afflictions_dict[interaction.guild_id].remove(affliction_to_remove)
-            self._save_json(interaction.guild_id, "afflictions", self.afflictions_dict[interaction.guild_id],
-                            cls=AfflictionEncoder)
+            self.data.get_affliction_list(interaction.guild_id).remove(affliction_to_remove)
 
             embed = AfflictionController.get_embed(affliction_to_remove)
             embed.set_footer(text="Affliction removed")
@@ -541,9 +351,7 @@ class Pagget:
             if is_minor:
                 affliction_to_edit.is_minor = is_minor
 
-            self.afflictions_dict[interaction.guild_id][index] = affliction_to_edit
-            self._save_json(interaction.guild_id, "afflictions", self.afflictions_dict[interaction.guild_id],
-                            cls=AfflictionEncoder)
+            self.data.get_affliction_list(interaction.guild_id)[index] = affliction_to_edit
 
             await interaction.response.send_message(f"Affliction '{affliction}' edited successfully.",
                                                     embed=AfflictionController.get_embed(affliction_to_edit),
@@ -594,12 +402,12 @@ class Pagget:
                 # Update the outcome value to reflect what was actually stolen
                 outcome.value = actual_steal_amount
 
-                self.balances_dict[target.id] = target_new_balance
+                self.data.set_user_balance(target.id, target_new_balance)
 
-            self.balances_dict[interaction.user.id] += outcome.value
+            self.data.set_user_balance(interaction.guild_id, self.data.get_user_balance(interaction.guild_id) + outcome.value)
 
             await interaction.response.send_message(
-                embed=get_outcome_embed(gather_type, outcome, old_balance, self.balances_dict[interaction.user.id],
+                embed=get_outcome_embed(gather_type, outcome, old_balance, self.data.get_user_balance(interaction.guild_id),
                                         target if target else None, interaction),
                 ephemeral=False)
 
@@ -647,8 +455,11 @@ class Pagget:
                     ephemeral=True)
                 return
             # Deduct berries from the user's balance
-            self.balances_dict[interaction.user.id] -= amount
-            self.balances_dict[user.id] += amount
+            user_balance = self.data.get_user_balance(interaction.user.id)
+            recipient_balance = self.data.get_user_balance(user.id)
+            
+            self.data.set_user_balance(interaction.user.id, user_balance - amount)
+            self.data.set_user_balance(user.id, recipient_balance + amount)
 
             # Let them know that berries were gifted
             await interaction.response.send_message(
@@ -662,10 +473,7 @@ class Pagget:
             self._validate_user(user.id, interaction.guild_id)
 
             # Add berries to the user's balance
-            self.balances_dict[user.id] = new_balance
-
-            # Save the updated balances
-            self._save_json(0, "balances", self.balances_dict)
+            self.data.set_user_balance(user.id, new_balance)
 
             await interaction.response.send_message(f"Added {new_balance} berries to {user.name}'s balance.",
                                                     ephemeral=True)
@@ -698,16 +506,18 @@ class Pagget:
                     f"You don't have enough berries to bet that much.\n-# Your balance: {self._validate_user(interaction.user.id, interaction.guild_id)}.",
                     ephemeral=True)
                 return
-            if self.guild_configs[interaction.guild_id].minimum_bet > bet:
+            if self.data.get_guild_config(interaction.guild_id).minimum_bet > bet:
                 await interaction.response.send_message(
-                    f"You bet *{bet}*, but the minimum bet is **{self.guild_configs[interaction.guild_id].minimum_bet}**.")
+                    f"You bet *{bet}*, but the minimum bet is **{self.data.get_guild_config(interaction.guild_id).minimum_bet}**.")
                 return
+            
+            balance = self.data.get_user_balance(interaction.user.id)
 
-            self.balances_dict[interaction.user.id] -= bet
+            self.data.set_user_balance(interaction.user.id, balance - bet)
 
-            game = Roulette(interaction.user, bet, bet_type, self.roulette_bet_types, self.balances_dict,
+            game = Roulette(interaction.user, bet, bet_type, self.roulette_bet_types, self.data,
                             self._validate_user,
-                            self.guild_configs[interaction.guild_id].minimum_bet)
+                            self.data.get_guild_config(interaction.guild_id).minimum_bet)
             await game.run(interaction)
 
         @gambling_group.command(name="slots", description="Play slots with your berries")
@@ -719,14 +529,14 @@ class Pagget:
                     f"You don't have enough berries to bet that much.\n-# Your balance: {self._validate_user(interaction.user.id, interaction.guild_id)}.",
                     ephemeral=True)
                 return
-            if self.guild_configs[interaction.guild_id].minimum_bet > bet:
+            if self.data.get_guild_config(interaction.guild_id).minimum_bet > bet:
                 await interaction.response.send_message(
-                    f"You bet *{bet}*, but the minimum bet is **{self.guild_configs[interaction.guild_id].minimum_bet}**.",
+                    f"You bet *{bet}*, but the minimum bet is **{self.data.get_guild_config(interaction.guild_id).minimum_bet}**.",
                     ephemeral=True)
                 return
 
-            game = Slots(interaction.user, bet, self.balances_dict,
-                         self.guild_configs[interaction.guild_id].minimum_bet)
+            game = Slots(interaction.user, bet, self.data,
+                         self.data.get_guild_config(interaction.guild_id).minimum_bet)
             await game.run(interaction)
 
         @gambling_group.command(name="blackjack", description="Play blackjack with your berries")
@@ -739,13 +549,14 @@ class Pagget:
                     f"You don't have enough berries to bet that much.\n-# Your balance: {self._validate_user(interaction.user.id, interaction.guild_id)}.",
                     ephemeral=True)
                 return
-            if self.guild_configs[interaction.guild_id].minimum_bet > bet:
+            if self.data.get_guild_config(interaction.guild_id).minimum_bet > bet:
                 await interaction.response.send_message(
-                    f"You bet *{bet}*, but the minimum bet is **{self.guild_configs[interaction.guild_id].minimum_bet}**.",
+                    f"You bet *{bet}*, but the minimum bet is **{self.data.get_guild_config(interaction.guild_id).minimum_bet}**.",
                     ephemeral=True)
                 return
 
-            self.balances_dict[interaction.user.id] -= bet
+            user_balance = self.data.get_user_balance(interaction.user.id)
+            self.data.set_user_balance(interaction.user.id, user_balance - bet)
 
             game = Blackjack(interaction.user, bet, self.balances_dict)
             await game.run(interaction)
@@ -786,45 +597,9 @@ class Pagget:
                 self.console.print(f"  • [green]{guild.name}[/] ({guild.id}) - {member_str}")
                 self.logger.log(f"    * Guild: {guild.name} ({guild.id}) {member_str}", "Bot")
 
-            # Load afflictions for each guild
-            self.console.print("\n[green]Loading afflictions...[/]")
-            self.logger.log("Loading afflictions...", "Bot")
-            self.afflictions_dict = {guild.id: self._load_json_afflictions(guild.id) for guild in self.client.guilds}
-            self.console.print(
-                f"[green]Loaded[/] {len(self.afflictions_dict)} [green]guild(s) with afflictions[/]")  # Added closing [/]
-
-            # Load hunt outcomes for each guild
-            self.console.print("\n[green]Loading hunt outcomes...[/]")
-            self.logger.log("Loading hunt outcomes...", "Bot")
-            self.hunt_outcomes_dict = {guild.id: self._load_json_hunt_outcomes(guild.id) for guild in
-                                       self.client.guilds}
-            self.console.print(
-                f"[green]Loaded[/] {len(self.hunt_outcomes_dict)} [green]guild(s) with hunt outcomes[/]")  # Added closing [/]
-
-            # Load steal outcomes for each guild
-            self.console.print("\n[green]Loading steal outcomes...[/]")
-            self.logger.log("Loading steal outcomes...", "Bot")
-            self.steal_outcomes_dict = {guild.id: self._load_json_steal_outcomes(guild.id) for guild in
-                                        self.client.guilds}
-            self.console.print(
-                f"[green]Loaded[/] {len(self.steal_outcomes_dict)} [green]guild(s) with steal outcomes[/]")  # Added closing [/]
-
-            # Load balances of each user
-            self.console.print("\n[green]Loading user balances...[/]")
-            self.logger.log("Loading user balances...", "Bot")
-            self.balances_dict = self._load_json_balances()
-            # Consider logging count after loading if successful
-            self.console.print(f"[green]Loaded[/] {len(self.balances_dict)} [green]user balances[/]")
-            # This second print might be redundant if the previous line shows the count
-            # self.console.print("[green]User balances loaded[/]") 
-
-            # Load guild configurations
-            self.console.print("\n[green]Loading guild configurations...[/]")
-            self.logger.log("Loading guild configurations...", "Bot")
-            self.guild_configs = {guild.id: self._load_json_configs(guild.id) for guild in self.client.guilds}
-            self.console.print(f"[green]Loaded[/] {len(self.guild_configs)} [green]guild(s) with configurations[/]")
-            # This second print might be redundant
-            # self.console.print("[green]Guild configurations loaded[/]")
+            # Load data and start autosaving
+            self.data.load()
+            self.data.start_autosave_thread()
 
             # If syncing is enabled, sync the command tree
             # NOTE: Using 'bot.tree' in the guild sync section, ensure 'bot' is defined or use 'self.tree' consistently
@@ -1081,17 +856,17 @@ class Pagget:
             A list of afflictions the character has
         """
         result = []
-        available_afflictions = self.afflictions_dict[guild_id].copy()
+        available_afflictions = self.data.get_affliction_list(guild_id).copy()
 
         # Roll for each possible affliction
-        for _ in range(len(self.afflictions_dict[guild_id])):
+        for _ in range(len(self.data.get_affliction_list(guild_id))):
             if not available_afflictions:
                 break
 
             # Check if we get any affliction at all
             if random.random() < (
-                    self.guild_configs[guild_id].minor_chance if is_minor else self.guild_configs[
-                        guild_id].chance) / 100:
+                    self.data.get_guild_config(guild_id).minor_chance if is_minor else self.data.get_guild_config(
+                        guild_id).chance) / 100:
                 # Group remaining afflictions by rarity
                 commons = [a for a in available_afflictions if a.rarity.lower() == "common"]
                 uncommons = [a for a in available_afflictions if a.rarity.lower() == "uncommon"]
@@ -1149,7 +924,7 @@ class Pagget:
         """
         search_term = search_term.lower()
 
-        for affliction in self.afflictions_dict[guild_id]:
+        for affliction in self.data.get_affliction_list(guild_id):
             name = affliction.name.lower()
             if search_term in name or search_term == name.split()[0]:
                 return affliction
@@ -1164,9 +939,9 @@ class Pagget:
             A HuntOutcome object representing the outcome of the hunt
         """
         if gather_type == "hunt":
-            rarity_groups, rarity_weights = organise_rarities(self.hunt_outcomes_dict, guild_id)
+            rarity_groups, rarity_weights = self.data.get_hunt_outcomes_and_weights(guild_id)
         else:
-            rarity_groups, rarity_weights = organise_rarities(self.steal_outcomes_dict, guild_id)
+            rarity_groups, rarity_weights = self.data.get_steal_outcomes_and_weights(guild_id)
 
         selected_group = random.choices(rarity_groups, weights=rarity_weights, k=1)[0]
         return random.choice(selected_group)
@@ -1179,12 +954,12 @@ class Pagget:
         :return: Returns the affliction object and its index in the afflictions list
         """
         return next(
-            (a, i) for i, a in enumerate(self.afflictions_dict[guild_id]) if
+            (a, i) for i, a in enumerate(self.data.get_affliction_list(guild_id)) if
             a.name.lower() == affliction_name.lower())
 
     def _if_affliction_exists(self, affliction: str, guild_id: int) -> bool:
         """ Checks if affliction exists in the guild's affliction list """
-        return any(a.name.lower() == affliction.lower() for a in self.afflictions_dict[guild_id])
+        return any(a.name.lower() == affliction.lower() for a in self.data.get_affliction_list(guild_id))
 
     def _validate_directory(self, directory: str) -> bool:
         if not os.path.exists(directory):
@@ -1227,10 +1002,10 @@ class Pagget:
         if user_id in self.balances_dict:
             return self.balances_dict[user_id]
 
-        self.balances_dict[user_id] = self.guild_configs[guild_id].starting_pay
+        self.balances_dict[user_id] = self.data.get_guild_config(guild_id).starting_pay
         self.console.print("User balance created:", user_id)
         self.logger.log(f"User balance created: {user_id}", "Bot")
-        return self.guild_configs[guild_id].starting_pay
+        return self.data.get_guild_config(guild_id).starting_pay
 
     def _write_token_file(self, token: str):
         if not self._validate_directory("data/"):
@@ -1249,54 +1024,9 @@ class Pagget:
         self.console.print("\n[red]Bot shutting down...[/]")
         self.logger.log("Bot shutting down...", "Bot")
 
-        if hasattr(self, "afflictions_dict") and self.afflictions_dict:
-            self.console.print("[green]Saving afflictions...[/]")
-            for guild_id in self.afflictions_dict:
-                self.console.print(f"  • Saving for guild {guild_id}")
-                self.logger.log(f"    Saving afflictions for guild {guild_id}", "Bot")
-                self._save_json(guild_id, "afflictions", self.afflictions_dict[guild_id], cls=AfflictionEncoder)
-
-            self.console.print("[green]Afflictions saved[/]")
-            self.logger.log("Afflictions saved", "Bot")
-
-        if hasattr(self, "guild_configs") and self.guild_configs:
-            self.console.print("\n[green]Saving guild configurations...[/]")
-            for guild_id in self.guild_configs:
-                self.console.print(f"  • Saving for guild {guild_id}")
-                self.logger.log(f"    Saving guild configuration for guild {guild_id}", "Bot")
-                self._save_json(guild_id, "guild_configs", self.guild_configs[guild_id], cls=GuildConfigEncoder)
-
-            self.console.print("[green]Guild configurations saved[/]")
-            self.logger.log("Guild configurations saved", "Bot")
-
-        if hasattr(self, "hunt_outcomes_dict") and self.hunt_outcomes_dict:
-            self.console.print("\n[green]Saving hunt outcomes...[/]")
-            for guild_id in self.hunt_outcomes_dict:
-                self.console.print(f"  • Saving for guild {guild_id}")
-                self.logger.log(f"    Saving hunt outcomes for guild {guild_id}", "Bot")
-                self._save_json(guild_id, "hunt_outcomes", self.hunt_outcomes_dict[guild_id], cls=GatherOutcomeEncoder)
-
-            self.console.print("[green]Hunt outcomes saved[/]")
-            self.logger.log("Hunt outcomes saved", "Bot")
-
-        if hasattr(self, "steal_outcomes_dict") and self.steal_outcomes_dict:
-            self.console.print("\n[green]Saving steal outcomes...[/]")
-            for guild_id in self.steal_outcomes_dict:
-                self.console.print(f"  • Saving for guild {guild_id}")
-                self.logger.log(f"    Saving steal outcomes for guild {guild_id}", "Bot")
-                self._save_json(guild_id, "steal_outcomes", self.steal_outcomes_dict[guild_id],
-                                cls=GatherOutcomeEncoder)
-
-            self.console.print("[green]Hunt outcomes saved[/]")
-            self.logger.log("Hunt outcomes saved", "Bot")
-
-        if hasattr(self, "balances_dict") and self.balances_dict:
-            self.console.print("\n[green]Saving user balances...[/]")
-            self.logger.log("Saving user balances...", "Bot")
-            self._save_json(0, "balances", self.balances_dict)
-
-            self.console.print("[green]User balances saved[/]")
-            self.logger.log("User balances saved", "Bot")
+        # Stop autosave thread if running
+        self.data.stop_autosave_thread()
+        self.data.save()
 
     def run(self):
         """Run the Discord bot."""
@@ -1353,14 +1083,4 @@ class Pagget:
 
 
 if __name__ == "__main__":
-    # Pagget().run()
-    data = Data()
-
-    data.load()
-
-    data.start_autosave_thread()
-
-    for _ in range(60):
-        time.sleep(1)
-
-    data.stop_autosave_thread()
+    Pagget().run()

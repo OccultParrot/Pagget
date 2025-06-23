@@ -153,6 +153,10 @@ class Data:
     def get_steal_outcome_list(self, guild_id: int) -> List[GatherOutcome]:
         return self._hunt_outcomes[guild_id]
 
+    def get_user_balance(self, user_id: int) -> int:
+        """ Returns the user's balance, or the guild default if not found. """
+        return self._balances.get(user_id, 0)
+
     # --- Methods for editing information --- #
     def set_guild_config(self, guild_id: int, config: GuildConfig) -> bool:
         if guild_id in self._configs:
@@ -177,6 +181,9 @@ class Data:
         else:
             print(f"Guild ID {guild_id} not found in hunt outcomes.")
             return False
+        
+    def set_user_balance(self, user_id: int, new_balance: int):
+        self._balances[user_id] = new_balance
 
     # --- Methods for appending information to dictionaries --- #
     def append_affliction(self, guild_id: int, new_affliction: Affliction) -> None:
@@ -206,12 +213,32 @@ class Data:
 
     def remove_steal_outcome(self, index) -> None:
         self._steal_outcomes.pop(index)
+    
+    # --- Methods for getting rarities and weights for rolling --- #
+    def get_hunt_outcomes_and_weights(self, guild_id: int):
+        return self._organise_rarities(self._hunt_outcomes[guild_id])
 
-    def get_user_balance(self, user_id: int) -> int:
-        """ Returns the user's balance, or the guild default if not found. """
-        return self._balances.get(user_id, 0)
+    def get_steal_outcomes_and_weights(self, guild_id: int):
+        return self._organise_rarities(self._steal_outcomes[guild_id])
 
-    # --- Methods for validating information --- #
+    def get_afflictions_and_weights(self, guild_id: int):
+        return self._organise_rarities(self._afflictions[guild_id])
+
+    def get_minor_afflictions_and_weights(self, guild_id: int):
+        afflictions, _ = self._organise_rarities(self._afflictions[guild_id])
+        return [afflictions[0]], [100]
+
+    # ---------------------- Static methods ---------------------- #
+    @staticmethod 
+    def _organise_rarities(collection: list[Affliction | GatherOutcome]):
+        commons = [obj for obj in collection if obj.rarity.lower() == "common"]
+        uncommons = [obj for obj in collection if obj.rarity.lower() == "uncommon"]
+        rares = [obj for obj in collection if obj.rarity.lower() == "rare"]
+        ultra_rares = [obj for obj in collection if obj.rarity.lower() == "ultra rare"]
+
+        return [commons, uncommons, rares, ultra_rares], [60, 25, 10, 5]
+    
+    # --- Methods for validating data --- #
     @staticmethod
     def _validate_directory(directory: str) -> bool:
         if not os.path.exists(directory):
