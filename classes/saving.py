@@ -26,6 +26,7 @@ class Data:
     autosave_interval = 10  # TEMP: for testing purposes, remove later
 
     def __init__(self):
+        self._autosave_stop_event = threading.Event()
         pass
 
     # --- Methods for saving and loading --- #
@@ -58,7 +59,7 @@ class Data:
         with open(file_path, "w") as file:
             try:
                 json.dump(data, file, indent=4, cls=cls)
-                print(f"Data saved to {file_path}: {len(data)} entries.")
+                # print(f"Data saved to {file_path}: {len(data)} entries.")
             except (IOError, TypeError) as e:
                 print(f"Error saving JSON to {file_path}: {e}")
 
@@ -118,7 +119,8 @@ class Data:
         while self._autosave_running:
             self.save()
             print("Autosave completed at", time.ctime())
-            threading.Event().wait(self.autosave_interval)
+            if self._autosave_stop_event.wait(self.autosave_interval):
+                break  # Stop even was set, exit immediately
 
     def start_autosave_thread(self):
         """ Starts the autosave thread if not already running. """
@@ -126,6 +128,7 @@ class Data:
             print("Autosave thread is already running.")
             return
         print("Starting autosave thread...")
+        self._autosave_stop_event.clear()  # Resetting stop event
         self._autosave_thread = threading.Thread(target=self._autosave, daemon=True)
         self._autosave_thread.start()
 
@@ -135,6 +138,7 @@ class Data:
             print("Autosave thread is not running.")
             return
         self._autosave_running = False
+        self._autosave_stop_event.set()  # Signal to stop autosave
         if self._autosave_thread is not None:
             self._autosave_thread.join()
             self._autosave_thread = None
@@ -181,7 +185,7 @@ class Data:
         else:
             print(f"Guild ID {guild_id} not found in hunt outcomes.")
             return False
-        
+
     def set_user_balance(self, user_id: int, new_balance: int):
         self._balances[user_id] = new_balance
 
@@ -213,7 +217,7 @@ class Data:
 
     def remove_steal_outcome(self, index) -> None:
         self._steal_outcomes.pop(index)
-    
+
     # --- Methods for getting rarities and weights for rolling --- #
     def get_hunt_outcomes_and_weights(self, guild_id: int):
         return self._organise_rarities(self._hunt_outcomes[guild_id])
@@ -229,7 +233,7 @@ class Data:
         return [afflictions[0]], [100]
 
     # ---------------------- Static methods ---------------------- #
-    @staticmethod 
+    @staticmethod
     def _organise_rarities(collection: list[Affliction | GatherOutcome]):
         commons = [obj for obj in collection if obj.rarity.lower() == "common"]
         uncommons = [obj for obj in collection if obj.rarity.lower() == "uncommon"]
@@ -237,7 +241,7 @@ class Data:
         ultra_rares = [obj for obj in collection if obj.rarity.lower() == "ultra rare"]
 
         return [commons, uncommons, rares, ultra_rares], [60, 25, 10, 5]
-    
+
     # --- Methods for validating data --- #
     @staticmethod
     def _validate_directory(directory: str) -> bool:
