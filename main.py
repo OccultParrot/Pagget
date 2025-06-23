@@ -756,7 +756,6 @@ class Pagget:
                         await message.channel.send(f"Bro, stop being such a whiner. Just work :skull:")
 
                 for index, word in enumerate(split_message):
-                    print(index, ":", word)
                     if (word == "bless" and
                             index + 2 < len(split_message) and
                             split_message[index + 1].strip() and
