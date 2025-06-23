@@ -814,9 +814,17 @@ class Pagget:
                                 send += f"{user.display_name.split(" |")[0]} has {self.data.balances[key]} berries\n"
                     await channel.send(send)
                     
-                if "you suck" in message.content.lower() and "pagget" in message.content.lower():
-                    channel = message.channel
-                    await channel.send(":sob:")
+                for mean_word in ["suck", "die", "bozo", "loser", "stupid"]:
+                    if mean_word in message.content.lower() and "pagget" in message.content.lower():
+                        channel = message.channel
+                        await channel.send(":sob:")
+                        break
+
+                for mean_word in ["thx", "thanks", "thank"]:
+                    if mean_word in message.content.lower() and "pagget" in message.content.lower():
+                        channel = message.channel
+                        await channel.send(":heart:")
+                        break
 
     @staticmethod
     def _name_from_user(user: discord.User | discord.Member) -> str:
