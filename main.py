@@ -412,8 +412,8 @@ class Pagget:
 
                 self.data.set_user_balance(target.id, target_new_balance)
 
-            self.data.set_user_balance(interaction.guild_id,
-                                       self.data.get_user_balance(interaction.guild_id) + outcome.value)
+            self.data.set_user_balance(interaction.user.id,
+                                       self.data.get_user_balance(interaction.user.id) + outcome.value)
 
             await interaction.response.send_message(
                 embed=get_outcome_embed(gather_type, outcome, old_balance,
