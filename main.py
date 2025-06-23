@@ -752,6 +752,9 @@ class Pagget:
                 "<:para_sob:1349156486529421352>",
                 "<:para_angy:1349156485044895774>"
             ]
+            
+            for emoji in message.guild.emojis:
+                print(emoji.name)
 
             bless_responses = [
                 "{name}, I bless you with {blessing} berries... and stuff :/",
