@@ -735,6 +735,30 @@ class Pagget:
         @self.client.event
         async def on_message(message: discord.Message):
             favored_ones = [767047725333086209, 953401260306989118, 757757494192767017]
+            
+            love_responses = [
+                ":heart:",
+                "Anything for you pookie :para_love:",
+                "Your welcome!",
+                "You too\n-# Shoot, wrong thing :para_sweat:",
+                ":para_dance:",
+                ":para_sparkle:",
+                ":para_cool:"
+            ]
+            
+            hate_responses = [
+                ":sob:",
+                ":para_stare:",
+                ":para_sob:",
+                ":para_angy:"
+            ]
+
+            bless_responses = [
+                "{name}, I bless you with {blessing} berries... and stuff :/",
+                "-# psst {name} I am giving you {blessing} out of the goodness of my heart, they dont really control me :wink:",
+                "The skies open above {name} and rains berries. {name} picks up {blessing}.",
+                "Hey {name}, catch!\n-# {blessing} berries fly towards {name}"
+            ]
 
             if message.author == self.client.user:
                 return
@@ -787,17 +811,10 @@ class Pagget:
                         try:
                             blessing = int(blessing)
 
-                            blessing_messages = [
-                                "{name}, I bless you with {blessing} berries... and stuff :/",
-                                "-# psst {name} I am giving you {blessing} out of the goodness of my heart, they dont really control me :wink:",
-                                "The skies open above {name} and rains berries. {name} picks up {blessing}.",
-                                "Hey {name}, catch!\n-# {blessing} berries fly towards {name}"
-                            ]
-
                             self._validate_user(blessed_one, message.guild.id)
                             self.data.balances[blessed_one] += blessing
 
-                            await message.channel.send(random.choice(blessing_messages).format(
+                            await message.channel.send(random.choice(bless_responses).format(
                                 name=self._name_from_user(self._get_user_from_id(blessed_one, message.guild)),
                                 blessing=blessing))
                         except ValueError:
@@ -817,13 +834,13 @@ class Pagget:
                 for mean_word in ["suck", "die", "bozo", "loser", "stupid"]:
                     if mean_word in message.content.lower() and "pagget" in message.content.lower():
                         channel = message.channel
-                        await channel.send(":sob:")
+                        await channel.send(random.choice(hate_responses))
                         break
 
-                for mean_word in ["thx", "thanks", "thank"]:
+                for mean_word in ["thx", "thanks", "thank", "love"]:
                     if mean_word in message.content.lower() and "pagget" in message.content.lower():
                         channel = message.channel
-                        await channel.send(":heart:")
+                        await channel.send(random.choice(love_responses))
                         break
 
     @staticmethod
