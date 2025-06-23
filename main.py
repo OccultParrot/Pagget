@@ -806,7 +806,7 @@ class Pagget:
                     for key in self.data.balances.keys():
                         for user in message.guild.members:
                             if user.id == key:
-                                send += f"{user.name} has {self.data.balances[key]} berries\n"
+                                send += f"{user.display_name.split(" |")[0]} has {self.data.balances[key]} berries\n"
                     await channel.send(send)
 
     @staticmethod
