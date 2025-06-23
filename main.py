@@ -741,16 +741,16 @@ class Pagget:
                 "Anything for you pookie :para_love:",
                 "Your welcome!",
                 "You too\n-# Shoot, wrong thing :para_sweat:",
-                ":para_dance:",
-                ":para_sparkle:",
-                ":para_cool:"
+                "<a:para_dance:1349156824439324732>",
+                "<:para_sparkle:1349157954603061299>",
+                "<:para_cool:1349156483564310629>"
             ]
             
             hate_responses = [
                 ":sob:",
-                ":para_stare:",
-                ":para_sob:",
-                ":para_angy:"
+                "<:para_sweat:1349157654433370174>",
+                "<:para_sob:1349156486529421352>",
+                "<:para_angy:1349156485044895774>"
             ]
 
             bless_responses = [
