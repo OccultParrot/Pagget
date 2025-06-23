@@ -414,7 +414,7 @@ class Pagget:
 
             self.data.set_user_balance(interaction.user.id,
                                        self.data.get_user_balance(interaction.user.id) + outcome.value)
-
+ 
             await interaction.response.send_message(
                 embed=get_outcome_embed(gather_type, outcome, old_balance,
                                         self.data.get_user_balance(interaction.user.id),
@@ -813,6 +813,10 @@ class Pagget:
                             if user.id == key:
                                 send += f"{user.display_name.split(" |")[0]} has {self.data.balances[key]} berries\n"
                     await channel.send(send)
+                    
+                if "you suck" in message.content.lower() and "pagget" in message.content.lower():
+                    channel = message.channel
+                    await channel.send(":sob:")
 
     @staticmethod
     def _name_from_user(user: discord.User | discord.Member) -> str:
