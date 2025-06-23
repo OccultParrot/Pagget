@@ -3,6 +3,8 @@ from typing import List
 
 import discord
 
+from classes.saving import Data
+
 
 class SlotsView(discord.ui.View):
     def __init__(self, spin_callback: callable):
@@ -24,10 +26,10 @@ class Slots:
 
     message: discord.Message
 
-    def __init__(self, user: discord.User, bet: int, users_dict: dict[int, int], minimum_bet: int):
+    def __init__(self, user: discord.User, bet: int, data: Data, minimum_bet: int):
         self.user: discord.User = user
         self.bet: int = bet
-        self.users_dict: dict[int, int] = users_dict
+        self.data = data
         self.minimum_bet: int = minimum_bet
 
         self.slot_emoji = [
@@ -52,7 +54,7 @@ class Slots:
             await interaction.response.send_message("Only the user that started the game can play.", ephemeral=True)
             return
 
-        if self.users_dict[self.user.id] < self.minimum_bet:
+        if self.data.get_user_balance(interaction.user.id) < self.minimum_bet:
             await interaction.response.send_message("Huh, looks like your all out of money.", ephemeral=True)
             return
         self._spin()
@@ -121,9 +123,11 @@ class Slots:
         # If no winning combination found
         if not won:
             self.round_income = 0
-            self.users_dict[self.user.id] -= self.bet
+            user_balance = self.data.get_user_balance(self.user.id)
+            self.data.set_user_balance(self.user.id, user_balance - self.bet)
 
     def _update_money(self, profit):
         self.user_gross_income += profit
         self.round_income = profit
-        self.users_dict[self.user.id] += profit
+        user_balance = self.data.get_user_balance(self.user.id)
+        self.data.set_user_balance(self.user.id, user_balance + profit)
