@@ -41,7 +41,7 @@ class AfflictionController:
         return commons + uncommons + rares + ultra_rares
 
     @staticmethod
-    def roll(afflictions: List[Affliction], affliction_chance: float, is_minor: bool, season: str) -> (Affliction,
+    def roll(afflictions: List[Affliction], affliction_chance: float, roll_type: str, season: str) -> (Affliction,
                                                                                                        bool):
         result = []
         available_afflictions = afflictions.copy()
@@ -55,12 +55,19 @@ class AfflictionController:
                 commons, uncommons, rares, ultra_rares = AfflictionController._sort_seasonal_rarities(
                     available_afflictions, season)
 
-                if is_minor:
+                if roll_type == "minor":
                     # Minor afflictions are only common
                     # so we filter those out and only roll from the filtered common
                     commons = [a for a in commons if a.is_minor]
                     rarity_groups = [commons]
                     rarity_weights = [100]
+                elif roll_type == "birth":
+                    commons = [a for a in commons if a.is_birth_defect]
+                    uncommons = [a for a in uncommons if a.is_birth_defect]
+                    rares = [a for a in rares if a.is_birth_defect]
+                    ultra_rares = [a for a in ultra_rares if a.is_birth_defect]
+                    rarity_groups = [commons, uncommons, rares, ultra_rares]
+                    rarity_weights = [60, 25, 10, 5]
                 else:
                     rarity_groups = [commons, uncommons, rares, ultra_rares]
                     rarity_weights = [60, 25, 10, 5]
@@ -95,7 +102,7 @@ class AfflictionController:
         seasonal_emoji = ":sunny:" if affliction.season == "dry" else ":cloud_rain:" if affliction.season == "wet" else ""
         return discord.Embed(
             title=f"{affliction.name.title()}",
-            description=f"-# {affliction.rarity.title()}\n{'-# *Minor Affliction*' if affliction.is_minor else f"-# *{seasonal_emoji} {affliction.season.title()} Season*" if affliction.season else ""}{f"\n-# *{seasonal_emoji} {affliction.season.title()} Season*" if affliction.season and affliction.is_minor else "\n"}\n{affliction.description}",
+            description=f"-# {affliction.rarity.title()}\n{'-# *Minor Affliction*' if affliction.is_minor else f"-# *{seasonal_emoji} {affliction.season.title()} Season*" if affliction.season else ""}{f"\n-# *{seasonal_emoji} {affliction.season.title()} Season*" if affliction.season and affliction.is_minor else "\n"}\n{affliction.description}\n\n{"-# This is a birth defect" if affliction.is_birth_defect else ""}",
             color=AfflictionController.get_rarity_color(affliction.rarity)
         )
 
