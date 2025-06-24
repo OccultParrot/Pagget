@@ -1,5 +1,5 @@
 import random
-from typing import List, Optional
+from typing import List, Optional, Literal
 
 import discord
 
@@ -10,7 +10,7 @@ class AfflictionController:
     """ This class does everything with afflictions """
 
     @staticmethod
-    def search_affliction(afflictions: List[Affliction],search_term: str) -> Optional[Affliction]:
+    def search_affliction(afflictions: List[Affliction], search_term: str) -> Optional[Affliction]:
         """
         Find an affliction by a search term.
         
@@ -37,11 +37,12 @@ class AfflictionController:
         uncommons = sorted(uncommons, key=lambda affliction: affliction.name.lower())
         rares = sorted(rares, key=lambda affliction: affliction.name.lower())
         ultra_rares = sorted(ultra_rares, key=lambda affliction: affliction.name.lower())
-        
+
         return commons + uncommons + rares + ultra_rares
 
     @staticmethod
-    def roll(afflictions: List[Affliction], affliction_chance: float, is_minor: bool) -> (Affliction, bool):
+    def roll(afflictions: List[Affliction], affliction_chance: float, is_minor: bool, season: str) -> (Affliction,
+                                                                                                       bool):
         result = []
         available_afflictions = afflictions.copy()
 
@@ -51,7 +52,7 @@ class AfflictionController:
                 break
 
             if random.random() < affliction_chance / 100:
-                commons, uncommons, rares, ultra_rares = AfflictionController._sort_rarities(available_afflictions)
+                commons, uncommons, rares, ultra_rares = AfflictionController._sort_rarities(available_afflictions, season)
 
                 if is_minor:
                     # Minor afflictions are only common
@@ -90,12 +91,13 @@ class AfflictionController:
 
     @staticmethod
     def get_embed(affliction: Affliction) -> discord.Embed:
+        # print(f"{affliction.name} season: {affliction.season}")
         return discord.Embed(
             title=affliction.name.title(),
-            description=f"-# {affliction.rarity.title()}\n{'-# *Minor Affliction*' if affliction.is_minor else ''}\n\n{affliction.description}",
+            description=f"-# {affliction.rarity.title()}\n{'-# *Minor Affliction*' if affliction.is_minor else ''}\n{'-# :fire: Dry Season' if affliction.season == "dry" else ""}{'-# :ocean: Wet Season' if affliction.season == "wet" else ""}\n{affliction.description}",
             color=AfflictionController.get_rarity_color(affliction.rarity)
         )
-    
+
     @staticmethod
     def get_rarity_color(rarity: str) -> discord.Color:
         """Get the color associated with a rarity."""
@@ -109,12 +111,15 @@ class AfflictionController:
             return discord.Color.yellow()
         else:
             return discord.Color.default()
-        
+
     @staticmethod
-    def _sort_rarities(unsorted_afflictions: List[Affliction]):
-        commons = [a for a in unsorted_afflictions if a.rarity == "common"]
-        uncommons = [a for a in unsorted_afflictions if a.rarity == "uncommon"]
-        rares = [a for a in unsorted_afflictions if a.rarity.lower() == "rare"]
-        ultra_rares = [a for a in unsorted_afflictions if a.rarity.lower() == "ultra rare"]
+    def _sort_rarities(unsorted_afflictions: List[Affliction], season: str):
+        # I HATE this way of doing it. TODO: Please find a better way to do this
+        opposite_season = "wet" if season == "dry" else "dry"
+        
+        commons = [a for a in unsorted_afflictions if a.rarity == "common" and a.season != opposite_season]
+        uncommons = [a for a in unsorted_afflictions if a.rarity == "uncommon" and a.season != opposite_season]
+        rares = [a for a in unsorted_afflictions if a.rarity.lower() == "rare" and a.season != opposite_season]
+        ultra_rares = [a for a in unsorted_afflictions if a.rarity.lower() == "ultra rare" and a.season != opposite_season]
 
         return commons, uncommons, rares, ultra_rares

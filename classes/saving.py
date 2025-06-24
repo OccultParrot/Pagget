@@ -109,6 +109,11 @@ class Data:
             except (ValueError, TypeError) as e:
                 print(f"Error converting data types from {file_path}: {e}")
                 return {}
+            
+    def _load_default_json(self, file_name: str, value_type: Type[T]):
+        # TODO: Load data from file and return the data
+        pass
+        
 
     # --- Autosave thread methods --- #
     def _autosave(self):
@@ -148,7 +153,9 @@ class Data:
         return self._configs[guild_id]
 
     def get_affliction_list(self, guild_id: int) -> List[Affliction]:
-        return self._afflictions[guild_id]
+        if guild_id in self._afflictions.keys():
+            return self._afflictions[guild_id]
+        pass # TODO: LOAD DEFAULTS
 
     def get_hunt_outcome_list(self, guild_id: int) -> List[GatherOutcome]:
         return self._hunt_outcomes[guild_id]

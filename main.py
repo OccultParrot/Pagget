@@ -202,9 +202,9 @@ class Pagget:
     def _register_affliction_commands(self) -> app_commands.Group:
         group = app_commands.Group(name="affliction", description="Affliction commands")
 
-        async def roll(interaction: discord.Interaction, dino: str, chance: float, is_minor: bool):
+        async def roll(interaction: discord.Interaction, dino: str, chance: float, is_minor: bool, season: str):
             afflictions = AfflictionController.roll(self.data.get_affliction_list(interaction.guild_id), chance,
-                                                    is_minor)
+                                                    is_minor, season)
 
             dino = dino.capitalize()
 
@@ -224,16 +224,25 @@ class Pagget:
                                                             afflictions])
 
         @group.command(name="roll", description="Rolls for afflictions affecting your dinosaur")
-        @app_commands.describe(dino="Your dinosaur's name")
-        @app_commands.checks.cooldown(1, 3600, key=lambda i: i.user.id)  # Uncomment to enable cooldown
-        async def roll_general(interaction: discord.Interaction, dino: str):
-            await roll(interaction, dino, self.data.get_guild_config(interaction.guild_id).chance, False)
+        @app_commands.describe(dino="Your dinosaur's name", season="The season the server is")
+        @app_commands.choices(season=[
+            app_commands.Choice(name="Wet Season", value="wet"),
+            app_commands.Choice(name="Dry Season", value="dry")
+        ])
+        # TODO: Uncomment
+        # @app_commands.checks.cooldown(1, 3600, key=lambda i: i.user.id)  # Uncomment to enable cooldown
+        async def roll_general(interaction: discord.Interaction, dino: str, season: app_commands.Choice[str]):
+            await roll(interaction, dino, self.data.get_guild_config(interaction.guild_id).chance, False, season)
 
         @group.command(name="roll-minor", description="Rolls for minor afflictions affecting your dinosaur")
-        @app_commands.describe(dino="Your dinosaur's name")
+        @app_commands.describe(dino="Your dinosaur's name", season="The season the server is")
+        @app_commands.choices(season=[
+            app_commands.Choice(name="Wet Season", value="wet"),
+            app_commands.Choice(name="Dry Season", value="dry")
+        ])
         @app_commands.checks.cooldown(1, 3600, key=lambda i: i.user.id)  # Uncomment to enable cooldown
-        async def roll_minor(interaction: discord.Interaction, dino: str):
-            await roll(interaction, dino, self.data.get_guild_config(interaction.guild_id).chance, True)
+        async def roll_minor(interaction: discord.Interaction, dino: str, season: app_commands.Choice[str]):
+            await roll(interaction, dino, self.data.get_guild_config(interaction.guild_id).chance, True, season)
 
         @group.command(name="list", description="Lists all available afflictions")
         @app_commands.describe(page="What page to display")
@@ -269,24 +278,30 @@ class Pagget:
         @group.command(name="add", description="Adds a new affliction to the database")
         @app_commands.describe(name="Name of the affliction", description="Description of the affliction",
                                rarity="Rarity of the affliction",
-                               is_minor="Whether the affliction is minor or not. ONLY AFFECTS COMMON RARITY")
+                               is_minor="Whether the affliction is minor or not. ONLY AFFECTS COMMON RARITY",
+                               season="The season that the user can get the affliction in")
         @app_commands.choices(
             rarity=[
                 app_commands.Choice(name="Common", value="common"),
                 app_commands.Choice(name="Uncommon", value="uncommon"),
                 app_commands.Choice(name="Rare", value="rare"),
                 app_commands.Choice(name="Ultra Rare", value="ultra rare")
+            ],
+            season=[
+                app_commands.Choice(name="Any", value="any"),
+                app_commands.Choice(name="Dry Season", value="dry"),
+                app_commands.Choice(name="Wet", value="wet")
             ]
         )
         @app_commands.checks.has_permissions(administrator=True)
         async def add_affliction(interaction: discord.Interaction, name: str, description: str,
-                                 rarity: app_commands.Choice[str], is_minor: bool = False):
+                                 rarity: app_commands.Choice[str], is_minor: bool = False, season: app_commands.Choice[str] = "any"):
             # Check if the affliction already exists
             if self._if_affliction_exists(name, interaction.guild_id):
                 await interaction.response.send_message(f"Affliction '{name}' already exists.", ephemeral=True)
                 return
 
-            new_affliction = Affliction(name=name, description=description, rarity=rarity.value, is_minor=is_minor)
+            new_affliction = Affliction(name=name, description=description, rarity=rarity.value, is_minor=is_minor, season=season if season != "any" else None)
             self.data.get_affliction_list(interaction.guild_id).append(new_affliction)
 
             await interaction.response.send_message(f"Affliction '{name}' added successfully.",
