@@ -52,7 +52,7 @@ class AfflictionController:
                 break
 
             if random.random() < affliction_chance / 100:
-                commons, uncommons, rares, ultra_rares = AfflictionController._sort_rarities(available_afflictions, season)
+                commons, uncommons, rares, ultra_rares = AfflictionController._sort_seasonal_rarities(available_afflictions, season)
 
                 if is_minor:
                     # Minor afflictions are only common
@@ -91,10 +91,10 @@ class AfflictionController:
 
     @staticmethod
     def get_embed(affliction: Affliction) -> discord.Embed:
-        # print(f"{affliction.name} season: {affliction.season}")
+        seasonal_emoji = ":sunny:" if affliction.season == "dry" else ":cloud_rain:" if affliction.season == "wet" else ""
         return discord.Embed(
-            title=affliction.name.title(),
-            description=f"-# {affliction.rarity.title()}\n{'-# *Minor Affliction*' if affliction.is_minor else ''}\n{'-# :fire: Dry Season' if affliction.season == "dry" else ""}{'-# :ocean: Wet Season' if affliction.season == "wet" else ""}\n{affliction.description}",
+            title=f"{affliction.name.title()}",
+            description=f"-# {affliction.rarity.title()}\n{'-# *Minor Affliction*' if affliction.is_minor else ''}\n\n{affliction.description}",
             color=AfflictionController.get_rarity_color(affliction.rarity)
         )
 
@@ -113,7 +113,7 @@ class AfflictionController:
             return discord.Color.default()
 
     @staticmethod
-    def _sort_rarities(unsorted_afflictions: List[Affliction], season: str):
+    def _sort_seasonal_rarities(unsorted_afflictions: List[Affliction], season: str):
         # I HATE this way of doing it. TODO: Please find a better way to do this
         opposite_season = "wet" if season == "dry" else "dry"
         
@@ -121,5 +121,15 @@ class AfflictionController:
         uncommons = [a for a in unsorted_afflictions if a.rarity == "uncommon" and a.season != opposite_season]
         rares = [a for a in unsorted_afflictions if a.rarity.lower() == "rare" and a.season != opposite_season]
         ultra_rares = [a for a in unsorted_afflictions if a.rarity.lower() == "ultra rare" and a.season != opposite_season]
+
+        return commons, uncommons, rares, ultra_rares
+
+    @staticmethod
+    def _sort_rarities(unsorted_afflictions: List[Affliction]):
+
+        commons = [a for a in unsorted_afflictions if a.rarity == "common"]
+        uncommons = [a for a in unsorted_afflictions if a.rarity == "uncommon"]
+        rares = [a for a in unsorted_afflictions if a.rarity.lower() == "rare"]
+        ultra_rares = [a for a in unsorted_afflictions if a.rarity.lower() == "ultra rare"]
 
         return commons, uncommons, rares, ultra_rares

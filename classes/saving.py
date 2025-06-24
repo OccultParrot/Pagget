@@ -109,11 +109,30 @@ class Data:
             except (ValueError, TypeError) as e:
                 print(f"Error converting data types from {file_path}: {e}")
                 return {}
-            
-    def _load_default_json(self, file_name: str, value_type: Type[T]):
-        # TODO: Load data from file and return the data
-        pass
-        
+
+    @staticmethod
+    def _initialize_afflictions() -> List[Affliction]:
+        default_affliction_path = os.path.join("defaults/", "afflictions.default.json")
+
+        if not os.path.exists(default_affliction_path):
+            print(f"Default afflictions file '{default_affliction_path}' does not exist. Returning empty list.")
+            return []
+
+        with open(default_affliction_path, "r") as file:
+            try:
+                raw_data = json.load(file)
+                print(f"Loaded default afflictions from {default_affliction_path}: {len(raw_data)} entries.")
+
+                # Convert each dictionary to an Affliction object
+                afflictions = [Affliction(**affliction_data) for affliction_data in raw_data]
+                return afflictions
+
+            except json.JSONDecodeError as e:
+                print(f"Error loading JSON from {default_affliction_path}: {e}")
+                return []
+            except (ValueError, TypeError) as e:
+                print(f"Error converting affliction data from {default_affliction_path}: {e}")
+                return []
 
     # --- Autosave thread methods --- #
     def _autosave(self):
@@ -155,7 +174,9 @@ class Data:
     def get_affliction_list(self, guild_id: int) -> List[Affliction]:
         if guild_id in self._afflictions.keys():
             return self._afflictions[guild_id]
-        pass # TODO: LOAD DEFAULTS
+
+        self._afflictions[guild_id] = self._initialize_afflictions()
+        return self._afflictions[guild_id]
 
     def get_hunt_outcome_list(self, guild_id: int) -> List[GatherOutcome]:
         return self._hunt_outcomes[guild_id]
