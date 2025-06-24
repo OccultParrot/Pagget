@@ -202,9 +202,9 @@ class Pagget:
     def _register_affliction_commands(self) -> app_commands.Group:
         group = app_commands.Group(name="affliction", description="Affliction commands")
 
-        async def roll(interaction: discord.Interaction, dino: str, chance: float, is_minor: bool, season: str):
+        async def roll(interaction: discord.Interaction, dino: str, chance: float, roll_type: str, season: str):
             afflictions = AfflictionController.roll(self.data.get_affliction_list(interaction.guild_id), chance,
-                                                    is_minor, season)
+                                                    roll_type, season)
 
             dino = dino.capitalize()
 
@@ -224,25 +224,23 @@ class Pagget:
                                                             afflictions])
 
         @group.command(name="roll", description="Rolls for afflictions affecting your dinosaur")
-        @app_commands.describe(dino="Your dinosaur's name", season="The season the server is")
+        @app_commands.describe(dino="Your dinosaur's name", roll_type="The type of affliction you are rolling for",
+                               season="The season the server is")
         @app_commands.choices(season=[
             app_commands.Choice(name="Wet Season", value="wet"),
             app_commands.Choice(name="Dry Season", value="dry")
-        ])
+        ],
+            roll_type=[
+                app_commands.Choice(name="General", value="general"),
+                app_commands.Choice(name="Minor", value="minor"),
+                app_commands.Choice(name="Birth Defect", value="birth"),
+            ])
         # TODO: Uncomment
         # @app_commands.checks.cooldown(1, 3600, key=lambda i: i.user.id)  # Uncomment to enable cooldown
-        async def roll_general(interaction: discord.Interaction, dino: str, season: app_commands.Choice[str]):
-            await roll(interaction, dino, self.data.get_guild_config(interaction.guild_id).chance, False, season)
-
-        @group.command(name="roll-minor", description="Rolls for minor afflictions affecting your dinosaur")
-        @app_commands.describe(dino="Your dinosaur's name", season="The season the server is")
-        @app_commands.choices(season=[
-            app_commands.Choice(name="Wet Season", value="wet"),
-            app_commands.Choice(name="Dry Season", value="dry")
-        ])
-        @app_commands.checks.cooldown(1, 3600, key=lambda i: i.user.id)  # Uncomment to enable cooldown
-        async def roll_minor(interaction: discord.Interaction, dino: str, season: app_commands.Choice[str]):
-            await roll(interaction, dino, self.data.get_guild_config(interaction.guild_id).chance, True, season)
+        async def roll_general(interaction: discord.Interaction, dino: str, roll_type: app_commands.Choice[str],
+                               season: app_commands.Choice[str]):
+            await roll(interaction, dino, self.data.get_guild_config(interaction.guild_id).chance, roll_type.value,
+                       season.value)
 
         @group.command(name="list", description="Lists all available afflictions")
         @app_commands.describe(page="What page to display")
@@ -279,6 +277,7 @@ class Pagget:
         @app_commands.describe(name="Name of the affliction", description="Description of the affliction",
                                rarity="Rarity of the affliction",
                                is_minor="Whether the affliction is minor or not. ONLY AFFECTS COMMON RARITY",
+                               is_birth_defect="Whether the affliction is birth defect",
                                season="The season that the user can get the affliction in")
         @app_commands.choices(
             rarity=[
@@ -289,19 +288,23 @@ class Pagget:
             ],
             season=[
                 app_commands.Choice(name="Any", value="any"),
+                app_commands.Choice(name="Wet Season", value="wet"),
                 app_commands.Choice(name="Dry Season", value="dry"),
-                app_commands.Choice(name="Wet", value="wet")
             ]
         )
         @app_commands.checks.has_permissions(administrator=True)
         async def add_affliction(interaction: discord.Interaction, name: str, description: str,
-                                 rarity: app_commands.Choice[str], is_minor: bool = False, season: app_commands.Choice[str] = "any"):
+                                 rarity: app_commands.Choice[str], is_minor: bool = False,
+                                 is_birth_defect: bool = False,
+                                 season: app_commands.Choice[str] = "any"):
             # Check if the affliction already exists
             if self._if_affliction_exists(name, interaction.guild_id):
                 await interaction.response.send_message(f"Affliction '{name}' already exists.", ephemeral=True)
                 return
 
-            new_affliction = Affliction(name=name, description=description, rarity=rarity.value, is_minor=is_minor, season=season if season != "any" else None)
+            new_affliction = Affliction(name=name, description=description, rarity=rarity.value, is_minor=is_minor,
+                                        is_birth_defect=is_birth_defect,
+                                        season=season if season != "any" else None)
             self.data.get_affliction_list(interaction.guild_id).append(new_affliction)
 
             await interaction.response.send_message(f"Affliction '{name}' added successfully.",
@@ -333,19 +336,27 @@ class Pagget:
                                name="New name for the affliction",
                                description="New description of the affliction",
                                rarity="New rarity of the affliction",
-                               is_minor="Whether the affliction is minor or not. ONLY AFFECTS COMMON RARITY")
+                               is_minor="Whether the affliction is minor or not. ONLY AFFECTS COMMON RARITY",
+                               is_birth_defect="Whether the affliction is birth defect",
+                               season="The season that the user can get the affliction in")
         @app_commands.choices(
             rarity=[
                 app_commands.Choice(name="Common", value="common"),
                 app_commands.Choice(name="Uncommon", value="uncommon"),
                 app_commands.Choice(name="Rare", value="rare"),
                 app_commands.Choice(name="Ultra Rare", value="ultra rare")
+            ],
+            season=[
+                app_commands.Choice(name="Any", value="any"),
+                app_commands.Choice(name="Wet Season", value="wet"),
+                app_commands.Choice(name="Dry Season", value="dry"),
             ]
         )
         @app_commands.checks.has_permissions(administrator=True)
         async def edit_affliction(interaction: discord.Interaction, affliction: str, name: str = None,
                                   description: str = None, rarity: app_commands.Choice[str] = None,
-                                  is_minor: bool = False):
+                                  is_minor: bool = False, is_birth_defect: bool = False,
+                                  season: app_commands.Choice[str] = None, ):
             # Check if the affliction exists
             if not self._if_affliction_exists(affliction, interaction.guild_id):
                 await interaction.response.send_message(f"Affliction '{affliction}' does not exist.",
@@ -368,6 +379,10 @@ class Pagget:
                 affliction_to_edit.rarity = rarity.value
             if is_minor:
                 affliction_to_edit.is_minor = is_minor
+            if is_birth_defect:
+                affliction_to_edit.is_birth_defect = is_birth_defect
+            if season:
+                affliction_to_edit.season = season
 
             self.data.get_affliction_list(interaction.guild_id)[index] = affliction_to_edit
 
@@ -378,7 +393,6 @@ class Pagget:
 
         # --- Handling Errors --- #
         roll_general.error(self.command_error_handler)
-        roll_minor.error(self.command_error_handler)
         list_afflictions.error(self.command_error_handler)
         add_affliction.error(self.command_error_handler)
         remove_affliction.error(self.command_error_handler)
