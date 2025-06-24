@@ -21,6 +21,7 @@ class Data:
 
     # Autosave Thread Variables
     _autosave_thread: threading.Thread = None
+    _autosave_stop_event: threading.Event # The flag that gets thrown for the autosave thread to stop
     _autosave_running: bool = False  # Flag to control autosave thread
     autosave_interval: int = 1800  # Autosave interval in seconds (default: 1/2 hour)
 
