@@ -1,5 +1,5 @@
 import random
-from typing import List, Optional, Literal
+from typing import List, Optional
 
 import discord
 
@@ -52,7 +52,8 @@ class AfflictionController:
                 break
 
             if random.random() < affliction_chance / 100:
-                commons, uncommons, rares, ultra_rares = AfflictionController._sort_seasonal_rarities(available_afflictions, season)
+                commons, uncommons, rares, ultra_rares = AfflictionController._sort_seasonal_rarities(
+                    available_afflictions, season)
 
                 if is_minor:
                     # Minor afflictions are only common
@@ -94,7 +95,7 @@ class AfflictionController:
         seasonal_emoji = ":sunny:" if affliction.season == "dry" else ":cloud_rain:" if affliction.season == "wet" else ""
         return discord.Embed(
             title=f"{affliction.name.title()}",
-            description=f"-# {affliction.rarity.title()}\n{'-# *Minor Affliction*' if affliction.is_minor else ''}\n\n{affliction.description}",
+            description=f"-# {affliction.rarity.title()}\n{'-# *Minor Affliction*' if affliction.is_minor else f"-# *{seasonal_emoji} {affliction.season.title()} Season*" if affliction.season else ""}{f"\n-# *{seasonal_emoji} {affliction.season.title()} Season*" if affliction.season and affliction.is_minor else "\n"}\n{affliction.description}",
             color=AfflictionController.get_rarity_color(affliction.rarity)
         )
 
@@ -116,11 +117,12 @@ class AfflictionController:
     def _sort_seasonal_rarities(unsorted_afflictions: List[Affliction], season: str):
         # I HATE this way of doing it. TODO: Please find a better way to do this
         opposite_season = "wet" if season == "dry" else "dry"
-        
+
         commons = [a for a in unsorted_afflictions if a.rarity == "common" and a.season != opposite_season]
         uncommons = [a for a in unsorted_afflictions if a.rarity == "uncommon" and a.season != opposite_season]
         rares = [a for a in unsorted_afflictions if a.rarity.lower() == "rare" and a.season != opposite_season]
-        ultra_rares = [a for a in unsorted_afflictions if a.rarity.lower() == "ultra rare" and a.season != opposite_season]
+        ultra_rares = [a for a in unsorted_afflictions if
+                       a.rarity.lower() == "ultra rare" and a.season != opposite_season]
 
         return commons, uncommons, rares, ultra_rares
 
