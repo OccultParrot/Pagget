@@ -4,6 +4,7 @@
 
 - Removed `/affliction roll-minor`
 - Added Seasonal Afflictions
+- Added Birth Defect Afflictions
 - Reworked Rolling for Afflictions:
   - `/affliction roll dino:[name] type:[general / minor / birth] season:[wet or dry]`
 - Updated Edit and Add Affliction to reflect affliction rework
