@@ -9,8 +9,7 @@
     "name": "Environmental Allergies",
     "description": "Environmental allergies cause the immune system to overreact to things like dust or plants, leading to symptoms like sneezing, coughing or affect your sleep",
     "rarity": "uncommon",
-    "is_minor": false,
-    "season": "dry"
+    "is_minor": false
   },
   {
     "name": "Blindness",
