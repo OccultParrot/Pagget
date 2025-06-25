@@ -736,6 +736,12 @@ class Pagget:
         async def on_message(message: discord.Message):
             favored_ones = [767047725333086209, 953401260306989118, 757757494192767017]
 
+            love_message_flags = [
+                "thx",
+                "thanks",
+                "thank",
+                "love"
+            ]
             love_responses = [
                 ":heart:",
                 "Anything for you pookie :para_love:",
@@ -746,6 +752,14 @@ class Pagget:
                 "<:para_cool:1349156483564310629>"
             ]
 
+            hate_message_flags = [
+                "suck",
+                "die",
+                "bozo",
+                "loser",
+                "stupid",
+                "hate"
+            ]
             hate_responses = [
                 ":sob:",
                 "<:para_sweat:1349157654433370174>",
@@ -832,13 +846,13 @@ class Pagget:
                                 send += f"{user.display_name.split(" |")[0]} has {self.data.balances[key]} berries\n"
                     await channel.send(send)
 
-                for mean_word in ["suck", "die", "bozo", "loser", "stupid"]:
+                for mean_word in hate_message_flags:
                     if mean_word in message.content.lower() and "pagget" in message.content.lower():
                         channel = message.channel
                         await channel.send(random.choice(hate_responses))
                         break
 
-                for mean_word in ["thx", "thanks", "thank", "love"]:
+                for mean_word in love_message_flags:
                     if mean_word in message.content.lower() and "pagget" in message.content.lower():
                         channel = message.channel
                         await channel.send(random.choice(love_responses))
