@@ -488,6 +488,32 @@ class Pagget:
             await interaction.response.send_message(f"Added {new_balance} berries to {user.name}'s balance.",
                                                     ephemeral=True)
 
+        @berries_group.command(name="leaderboard", description="Show the leaderboard of who has the most berries")
+        @app_commands.describe(count="The amount of leaderboard slots shown")
+        @app_commands.checks.cooldown(5, 60, key=lambda i: i.user.id)
+        async def leaderboard(interaction: discord.Interaction, count: int = -1):
+            embed = discord.Embed(title="=== Berries Leaderboard ===", description="", color=discord.Color.blue())
+
+            sorted_berries = dict(sorted(self.data.balances.items(), key=lambda x: x[1], reverse=True))
+            
+            if count < 0:
+                count = len(sorted_berries)
+
+            i = 0
+            for key, value in sorted_berries.items():
+                if i >= count:
+                    break
+
+                # Checking if member is in the guild
+                member = interaction.guild.get_member(key)
+                if not member:
+                    continue
+
+                embed.description += f"{i + 1}: {":crown:" if i == 0 else ""} {member.display_name.split(" |")[0]} {value}\n"
+                # Increase iteration counter
+                i += 1
+            await interaction.response.send_message(embed=embed)
+          
         # Handling errors
         hunt.error(self.command_error_handler)
         steal.error(self.command_error_handler)
