@@ -489,9 +489,9 @@ class Pagget:
                                                     ephemeral=True)
 
         @berries_group.command(name="leaderboard", description="Show the leaderboard of who has the most berries")
-        @app_commands.describe(count="The amount of leaderboard slots shown")
+        @app_commands.describe(count="The amount of leaderboard slots shown. use a number less than 0 to show all rankings")
         @app_commands.checks.cooldown(5, 60, key=lambda i: i.user.id)
-        async def leaderboard(interaction: discord.Interaction, count: int = -1):
+        async def leaderboard(interaction: discord.Interaction, count: int = 10):
             embed = discord.Embed(title="=== Berries Leaderboard ===", description="", color=discord.Color.blue())
 
             sorted_berries = dict(sorted(self.data.balances.items(), key=lambda x: x[1], reverse=True))
@@ -507,6 +507,8 @@ class Pagget:
                 # Checking if member is in the guild
                 member = interaction.guild.get_member(key)
                 if not member:
+                    continue
+                elif member.name == "pagget":
                     continue
 
                 embed.description += f"{i + 1}: {":crown:" if i == 0 else ""} {member.display_name.split(" |")[0]} {value}\n"
