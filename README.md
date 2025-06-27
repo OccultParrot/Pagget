@@ -55,6 +55,11 @@ Commands are seperated three groups, `affliction`, `berries`, `gambling`. (Gambl
 - `/berries set` - Sets the amount of berries the selected user has
 - `/berries give` - Gives the specified amount of berries from your account to the specified user
 
+### Gambling Commands
+
+- `/berries gambling blackjack` - Play blackjack with your berries
+- `/berries gambling roulette` - Play roulette with your berries
+- `/berries gambling slots` - Play slots with your berries
 
 ## How is Data Stored?
 
