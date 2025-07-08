@@ -21,6 +21,7 @@ class Data:
 
     # Autosave Thread Variables
     _autosave_thread: threading.Thread = None
+    _autosave_stop_event: threading.Event # The flag that gets thrown for the autosave thread to stop
     _autosave_running: bool = False  # Flag to control autosave thread
     autosave_interval: int = 1800  # Autosave interval in seconds (default: 1/2 hour)
 
@@ -110,6 +111,30 @@ class Data:
                 print(f"Error converting data types from {file_path}: {e}")
                 return {}
 
+    @staticmethod
+    def _initialize_afflictions() -> List[Affliction]:
+        default_affliction_path = os.path.join("defaults/", "afflictions.default.json")
+
+        if not os.path.exists(default_affliction_path):
+            print(f"Default afflictions file '{default_affliction_path}' does not exist. Returning empty list.")
+            return []
+
+        with open(default_affliction_path, "r") as file:
+            try:
+                raw_data = json.load(file)
+                print(f"Loaded default afflictions from {default_affliction_path}: {len(raw_data)} entries.")
+
+                # Convert each dictionary to an Affliction object
+                afflictions = [Affliction(**affliction_data) for affliction_data in raw_data]
+                return afflictions
+
+            except json.JSONDecodeError as e:
+                print(f"Error loading JSON from {default_affliction_path}: {e}")
+                return []
+            except (ValueError, TypeError) as e:
+                print(f"Error converting affliction data from {default_affliction_path}: {e}")
+                return []
+
     # --- Autosave thread methods --- #
     def _autosave(self):
         """ This method is run in a separate thread to autosave data periodically. """
@@ -148,6 +173,10 @@ class Data:
         return self._configs[guild_id]
 
     def get_affliction_list(self, guild_id: int) -> List[Affliction]:
+        if guild_id in self._afflictions.keys():
+            return self._afflictions[guild_id]
+
+        self._afflictions[guild_id] = self._initialize_afflictions()
         return self._afflictions[guild_id]
 
     def get_hunt_outcome_list(self, guild_id: int) -> List[GatherOutcome]:
