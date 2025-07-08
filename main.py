@@ -31,6 +31,7 @@ async def read_error(interaction: List[discord.Interaction], error: app_commands
         await interaction[0].response.send_message(error, ephemeral=True)
     else:
         logger.log(f"Error while processing command: {error}", "Bot")
+        print(error)
         await interaction[0].response.send_message("An error occurred while running the command",
                                                    ephemeral=True)
 
@@ -135,8 +136,10 @@ class Pagget:
 
         # Clear any existing commands if we're syncing
         if any(arg == "--sync" for arg in sys.argv):
-            self.tree.clear_commands(guild=None)  # Clear before registering
+            self.tree.clear_commands(guild=None)
 
+        if any(arg == "--no" for arg in sys.argv):
+            return
         # Register commands and events
         self._register_commands()
         self._register_events()
@@ -205,7 +208,6 @@ class Pagget:
         async def roll(interaction: discord.Interaction, dino: str, chance: float, roll_type: str, season: str):
             afflictions = AfflictionController.roll(self.data.get_affliction_list(interaction.guild_id), chance,
                                                     roll_type, season)
-
             dino = dino.capitalize()
 
             if not afflictions:
@@ -235,8 +237,7 @@ class Pagget:
                 app_commands.Choice(name="Minor", value="minor"),
                 app_commands.Choice(name="Birth Defect", value="birth"),
             ])
-        # TODO: Uncomment
-        # @app_commands.checks.cooldown(1, 3600, key=lambda i: i.user.id)  # Uncomment to enable cooldown
+        @app_commands.checks.cooldown(1, 3600, key=lambda i: i.user.id)  # Uncomment to enable cooldown
         async def roll_general(interaction: discord.Interaction, dino: str, roll_type: app_commands.Choice[str],
                                season: app_commands.Choice[str]):
             await roll(interaction, dino, self.data.get_guild_config(interaction.guild_id).chance, roll_type.value,
@@ -392,7 +393,7 @@ class Pagget:
             self.logger.log(f"{interaction.user.name} edited affliction {affliction}", "Bot")
 
         # --- Handling Errors --- #
-        roll_general.error(self.command_error_handler)
+        # roll_general.error(self.command_error_handler)
         list_afflictions.error(self.command_error_handler)
         add_affliction.error(self.command_error_handler)
         remove_affliction.error(self.command_error_handler)

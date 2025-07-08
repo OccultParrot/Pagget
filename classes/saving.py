@@ -170,6 +170,9 @@ class Data:
 
     # --- Methods for getting information --- #
     def get_guild_config(self, guild_id: int) -> GuildConfig:
+        if guild_id not in self._configs:
+            print(f"Guild ID {guild_id} not found in configs. Initializing default config.")
+            self._configs[guild_id] = GuildConfig(species="Parasaurolophus", chance=25)
         return self._configs[guild_id]
 
     def get_affliction_list(self, guild_id: int) -> List[Affliction]:
