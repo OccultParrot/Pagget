@@ -305,7 +305,7 @@ class Pagget:
 
             new_affliction = Affliction(name=name, description=description, rarity=rarity.value, is_minor=is_minor,
                                         is_birth_defect=is_birth_defect,
-                                        season=season if season != "any" else None)
+                                        season=season.value if season.value != "any" else None)
             self.data.get_affliction_list(interaction.guild_id).append(new_affliction)
 
             await interaction.response.send_message(f"Affliction '{name}' added successfully.",
