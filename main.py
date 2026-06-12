@@ -1049,17 +1049,20 @@ class Pagget:
         atexit.register(self._exit_handler)
         token = None
 
+        token = os.getenv("DISCORD_TOKEN")
+
         # First try to get token from data/bot_token.txt
-        try:
-            with open("data/bot_token.txt", "r") as f:
-                token = f.read().strip()
-                if not validate_discord_token(token):
-                    self.console.print(
-                        "[red]Token file holds invalid Discord token, checking args. If args do not contain '--token=' then collecting manual input.[/]")
-                    token = None
-        except FileNotFoundError:
-            self.console.print(
-                "[yellow]Token file not found, checking args. If args do not contain '--token=' then collecting manual input.[/]")
+        if not token:
+            try:
+                with open("data/bot_token.txt", "r") as f:
+                    token = f.read().strip()
+                    if not validate_discord_token(token):
+                        self.console.print(
+                            "[red]Token file holds invalid Discord token, checking args. If args do not contain '--token=' then collecting manual input.[/]")
+                        token = None
+            except FileNotFoundError:
+                self.console.print(
+                    "[yellow]Token file not found, checking args. If args do not contain '--token=' then collecting manual input.[/]")
 
         for arg in sys.argv:
             if arg == "--debug":
