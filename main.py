@@ -669,7 +669,8 @@ class Pagget:
 
             # If syncing is enabled, sync the command tree
             # NOTE: Using 'bot.tree' in the guild sync section, ensure 'bot' is defined or use 'self.tree' consistently
-            if any(arg == "--sync" for arg in sys.argv):
+            # if any(arg == "--sync" for arg in sys.argv):
+            if True:
                 self.console.print("\n[green]Syncing command tree globally...[/]")
                 self.logger.log("Syncing command tree globally...", "Bot")
                 self.console.print("[yellow]Warning: Avoid syncing commands too often to avoid rate limits...[/]")
