@@ -129,8 +129,9 @@ class Pagget:
         }
 
         # Configure Discord client
-        intents = discord.Intents(messages=True, guilds=True, members=True)
+        intents = discord.Intents.all()
         intents.message_content = True
+        
         self.client = discord.Client(intents=intents)
         self.tree = app_commands.CommandTree(self.client)
 
@@ -660,7 +661,7 @@ class Pagget:
             self.logger.log(f"{self.client.user.name} has logged in as {self.client.user}", "Bot")
 
             self.console.print("\nConnected Guilds:")
-            self.logger.log(f"{self.client.user.name} connected to {len(self.client.guilds)} guilds:", "Bot")
+            self.lif any(arg == "--sync" for arg in sys.argv):ogger.log(f"{self.client.user.name} connected to {len(self.client.guilds)} guilds:", "Bot")
 
             for guild in self.client.guilds:
                 member_str = f"{guild.member_count} member{'s' if guild.member_count > 1 else ''}"
