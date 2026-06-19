@@ -3,6 +3,9 @@ from typing import Optional, Literal, List
 
 import discord
 
+import database_utils
+import models
+
 
 class Card:
     def __init__(self, suit: Literal["hearts", "diamonds", "clubs", "spades"],
@@ -23,8 +26,9 @@ class Card:
 
 
 class Blackjack:
-    def __init__(self, user: discord.User, bet: int, users_dict: dict[int, int]):
-        self.users_dict = users_dict
+    def __init__(self, user: discord.User, bet: int, database: database_utils.DatabaseClient, server: models.Server):
+        self.database = database
+        self.server = server
         self.user = user
         self.bet = bet
         self.game_over = False
@@ -117,17 +121,12 @@ class Blackjack:
             self.result = "push"
 
     def _handle_payout(self):
-        user_id = self.user.id
-
-        if user_id not in self.users_dict:
-            self.users_dict[user_id] = 0
-
         if self.result == "blackjack":
-            self.users_dict[user_id] += int(self.bet * 2.5)
+            self.database.add_berries_balance(self.user.id, self.server.id, int(self.bet * 2.5))
         elif self.result in ["player_wins", "dealer_bust"]:
-            self.users_dict[user_id] += self.bet * 2
+            self.database.add_berries_balance(self.user.id, self.server.id, self.bet * 2)
         elif self.result == "push":
-            self.users_dict[user_id] += self.bet
+            self.database.add_berries_balance(self.user.id, self.server.id, self.bet)
 
     def _get_embed(self, status: Literal["play", "ended"]) -> discord.Embed:
         player_score = self._get_hand_score(self.player_hand)

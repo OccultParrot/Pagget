@@ -1,214 +1,97 @@
-import atexit
-import math
 import os
-import random
-import sys
-from typing import List, Optional, Literal
+from code import interact
+from typing import Optional
 
 import discord
-import dotenv
-import requests
-from discord import app_commands
-from rich.console import Console
+import math
+from discord import Client, app_commands
 
-from classes.afflictions import AfflictionController
-from classes.gambling import Roulette, Blackjack, Slots
-from classes.logger import Logger
-from classes.permissions import has_admin_check
-from classes.saving import Data
-from classes.typepairs import Affliction, GuildConfig, GatherOutcome
-
-# Constants
-DATA_DIRECTORY = "data"
-LOG_FILE = "log.txt"
+import gathers
+import models
+import afflictions as af
+from blackjack import Blackjack
+from roulette import RouletteBet, Roulette
+from database_utils import DatabaseClient
+from slots import Slots
 
 
-async def read_error(interaction: List[discord.Interaction], error: app_commands.AppCommandError, logger: Logger):
-    if isinstance(error, app_commands.MissingPermissions):
-        await interaction[0].response.send_message("You don't have permission to use this command.",
-                                                   ephemeral=True)
-    elif isinstance(error, app_commands.CommandOnCooldown):
-        await interaction[0].response.send_message(error, ephemeral=True)
-    else:
-        logger.log(f"Error while processing command: {error}", "Bot")
-        print(error)
-        await interaction[0].response.send_message("An error occurred while running the command",
-                                                   ephemeral=True)
-
-
-def get_paths(directory_name: str, guild_id: int) -> (str, str):
-    return os.path.join(DATA_DIRECTORY, directory_name), os.path.join(DATA_DIRECTORY, directory_name,
-                                                                      f"{guild_id}.json")
-
-
-def get_outcome_color(value: int) -> discord.Color:
-    if value < 0:
-        return discord.Color.red()
-    elif value == 0:
-        return discord.Color.greyple()
-    else:
-        return discord.Color.green()
-
-
-def get_outcome_embed(gather_type: Literal["hunt", "steal"], outcome: GatherOutcome, old_balance: int, new_balance: int,
-                      target: Optional[discord.Member], interaction: discord.Interaction) -> discord.Embed:
-    """Create a Discord embed for a hunt outcome."""
-
-    embed = discord.Embed(
-        title=f"Successful {gather_type.title()}!" if outcome.value > 0 else f"Failed {gather_type.title()}!",
-        description=outcome.description.format(target=target.display_name.split(' |')[
-            0] if target else "", value=abs(
-            outcome.value)) + f"{f'\n-# Target: {target.display_name}\n' if target else ''}",
-        color=get_outcome_color(outcome.value)
-    )
-    embed.set_author(name=interaction.user.display_name, icon_url=interaction.user.avatar.url)
-
-    embed.set_footer(text=f"{new_balance} total berries")
-
-    return embed
-
-
-def validate_discord_token(token: str) -> bool:
-    """ Validates a given Discord token """
-    if not token:
-        return False
-
-    url = "https://discord.com/api/v10/users/@me"
-    headers = {"Authorization": f"Bot {token}"}
-
-    try:
-        response = requests.get(url, headers=headers)
-        if response.status_code != 200:
-            return False
-
-        data = response.json()
-        print(f"Token is valid! Bot name: {data.get('username')}")
-        return True
-    except Exception as e:
-        print("Error validating token:", e)
-        return False
-
-
-def organise_rarities(dictionary: dict[int, List[Affliction | GatherOutcome]], index: int):
-    commons = [item for item in dictionary[index] if item.rarity.lower() == "common"]
-    uncommons = [item for item in dictionary[index] if
-                 item.rarity.lower() == "uncommon"]
-    rares = [item for item in dictionary[index] if item.rarity.lower() == "rare"]
-    ultra_rares = [item for item in dictionary[index] if
-                   item.rarity.lower() == "ultra rare"]
-
-    return [commons, uncommons, rares, ultra_rares], [60, 25, 10, 5]
-
-
-class Pagget:
-    """Main bot class to handle Discord interactions and affliction management."""
-
+class Pagget(Client):
     def __init__(self):
-        """Initialize the bot with required configurations and load afflictions."""
-        # Load environment variables
-        dotenv.load_dotenv()
-
-        # Setup console and logging
-        self.console = Console()
-        self.logger = Logger(LOG_FILE)
-
-        # Data class
-        self.data: Data = Data()
-
-        self.roulette_bet_types: dict[str, str] = {
-            "red": "Red",
-            "black": "Black",
-            "green": "Green",
-            "even": "Even",
-            "odd": "Odd",
-            "low": "1-18",
-            "high": "19-36",
-            "dozen1": "1-12",
-            "dozen2": "13-24",
-            "dozen3": "25-36"
-        }
-
-        # Configure Discord client
-        intents = discord.Intents.all()
+        intents = discord.Intents.default()
+        intents.members = True
+        intents.messages = True
         intents.message_content = True
-        self.client = discord.Client(intents=intents)
-        self.tree = app_commands.CommandTree(self.client)
+        super().__init__(intents=intents)
 
-        # Clear any existing commands if we're syncing
-        if any(arg == "--sync" for arg in sys.argv):
-            self.tree.clear_commands(guild=None)
+        self.database = DatabaseClient()
+        self.tree = app_commands.CommandTree(self)
 
-        if any(arg == "--no" for arg in sys.argv):
-            return
-        # Register commands and events
+    async def setup_hook(self) -> None:
         self._register_commands()
-        self._register_events()
+        print(f"Syncing command tree")
+        await self.tree.sync()
+
+    async def on_ready(self):
+        print(f"Logged in as {self.user.display_name} | {self.user.id}")
 
     def _register_commands(self):
-        """Register all Discord slash commands."""
-
         @self.tree.command(name="set-configs",
                            description="Sets the guild configuration. Dont enter any changes to view the current configuration")
-        @app_commands.describe(species="Species of the dinosaur",
-                               chance="Percent chance of rolling afflictions (0-100)",
+        @app_commands.describe(chance="Percent chance of rolling afflictions (0-100)",
                                minor_chance="Percent chance of rolling minor afflictions (0-100)")
         @app_commands.checks.has_permissions(administrator=True)
-        async def set_configs(interaction: discord.Interaction, species: str = None, chance: int = None,
+        async def set_configs(interaction: discord.Interaction, chance: int = None,
                               minor_chance: bool = None, starting_pay: int = None, minimum_bet: int = None):
             try:
-                guild_config: GuildConfig = self.data.get_guild_config(interaction.guild_id)
+                server = self.database.get_server(interaction.guild_id, interaction.guild.name)
 
-                if species is not None:
-                    guild_config.species = species
+                if server is None:
+                    server = models.Server(
+                        id=interaction.guild_id,
+                        name=interaction.guild.name,
+                    )
+
                 if chance is not None:
-                    guild_config.chance = chance
+                    server.affliction_chance = chance / 100
                 if minor_chance is not None:
-                    guild_config.minor_chance = minor_chance
+                    server.minor_affliction_chance = minor_chance / 100
                 if starting_pay is not None:
-                    guild_config.starting_pay = starting_pay
+                    server.starting_pay = starting_pay
                 if minimum_bet is not None:
-                    guild_config.minimum_bet = minimum_bet
+                    server.minimum_bet = minimum_bet
 
-                self.data.set_guild_config(interaction.guild_id, guild_config)
+                self.database.add_server(server)
 
                 embed = discord.Embed(title=f"{interaction.guild.name}'s Configuration",
                                       description="Guild configuration has been updated.")
-                embed.add_field(name="Species", value=guild_config.species, inline=False)
-                embed.add_field(name="Affliction Chance", value=f"{guild_config.chance}%",
+                embed.add_field(name="Affliction Chance", value=f"{server.chance}%",
                                 inline=False)
                 embed.add_field(name="Minor Affliction Chance",
-                                value=f"{guild_config.minor_chance}%", inline=False)
-                embed.add_field(name="Starting Pay", value=f"{guild_config.starting_pay}",
+                                value=f"{server.minor_chance}%", inline=False)
+                embed.add_field(name="Starting Pay", value=f"{server.starting_pay}",
                                 inline=False)
-                embed.add_field(name="Minimum Bet", value=f"{guild_config.minimum_bet}",
+                embed.add_field(name="Minimum Bet", value=f"{server.minimum_bet}",
                                 inline=False)
 
                 await interaction.response.send_message(f"Guild configuration updated.", embed=embed, ephemeral=True)
-                self.logger.log(f"{interaction.user.name} updated guild configuration for guild {interaction.guild_id}",
-                                "Bot")
 
             except Exception as e:
-                self.logger.log(f"Error in set_configs: {e}", "Bot")
+                print(f"Error in set_configs command! {e}")
                 await interaction.response.send_message("An error occurred while setting the guild configuration",
                                                         ephemeral=True)
 
-        set_configs.error(self.command_error_handler)
-
-        # Add affliction commands to the tree
         self.tree.add_command(self._register_affliction_commands())
-
-        # Add the berry commands to the command tree
         self.tree.add_command(self._register_berry_commands())
-
-        # @self.tree.add_command(name="help")
+        self.tree.add_command(self._register_gambling_commands())
 
     def _register_affliction_commands(self) -> app_commands.Group:
         group = app_commands.Group(name="affliction", description="Affliction commands")
 
-        async def roll(interaction: discord.Interaction, dino: str, chance: float, roll_type: str, season: str):
-            afflictions = AfflictionController.roll(self.data.get_affliction_list(interaction.guild_id), chance,
-                                                    roll_type, season)
-            dino = dino.capitalize()
+        async def roll(interaction: discord.Interaction, dino: str, chance: float, season: models.Season,
+                       affliction_pool: list[models.Affliction]):
+            dino = dino.title()
+
+            afflictions: list[models.Affliction] = af.roll_afflictions(affliction_pool, chance, season)
 
             if not afflictions:
                 await interaction.response.send_message(f"{dino} has **no** afflictions")
@@ -216,891 +99,403 @@ class Pagget:
 
             if len(afflictions) == 1:
                 await interaction.response.send_message(
-                    f"{dino} has **{afflictions[0].name}**.",
-                    embed=AfflictionController.get_embed(afflictions[0])
+                    f"{dino} has **{afflictions[0].title}**.",
+                    embed=af.get_embed(afflictions[0])
                 )
                 return
 
             await interaction.response.send_message(f"{dino} has the following afflictions:",
-                                                    embeds=[AfflictionController.get_embed(affliction) for affliction in
-                                                            afflictions])
+                                                    embeds=[af.get_embed(a) for a in afflictions])
 
         @group.command(name="roll", description="Rolls for afflictions affecting your dinosaur")
         @app_commands.describe(dino="Your dinosaur's name", roll_type="The type of affliction you are rolling for",
                                season="The season the server is")
         @app_commands.choices(season=[
-            app_commands.Choice(name="Wet Season", value="wet"),
-            app_commands.Choice(name="Dry Season", value="dry")
-        ],
-            roll_type=[
-                app_commands.Choice(name="General", value="general"),
-                app_commands.Choice(name="Minor", value="minor"),
-                app_commands.Choice(name="Birth Defect", value="birth"),
-            ])
+            app_commands.Choice(name="Spring", value="spring"),
+            app_commands.Choice(name="Summer", value="summer"),
+            app_commands.Choice(name="Winter", value="winter"),
+            app_commands.Choice(name="Fall", value="fall"),
+        ], roll_type=[
+            app_commands.Choice(name="General", value="general"),
+            app_commands.Choice(name="Minor", value="minor"),
+            app_commands.Choice(name="Birth Defect", value="birth"),
+        ])
         @app_commands.checks.cooldown(1, 3600, key=lambda i: i.user.id)  # Uncomment to enable cooldown
-        async def roll_general(interaction: discord.Interaction, dino: str, roll_type: app_commands.Choice[str],
-                               season: app_commands.Choice[str]):
-            await roll(interaction, dino, self.data.get_guild_config(interaction.guild_id).chance, roll_type.value,
-                       season.value)
+        async def roll_general(interaction: discord.Interaction, dino: str, roll_type: str, season: str):
+            server: models.Server = self.database.get_server(interaction.guild_id, interaction.guild.name)
+            server_afflictions: list[models.Affliction] = self.database.get_afflictions(server.id)
+
+            if roll_type == "birth":
+                affliction_pool = [a for a in server_afflictions if a.is_birth_defect]
+            elif roll_type == "minor":
+                affliction_pool = [a for a in server_afflictions if a.is_minor]
+            else:
+                affliction_pool = [a for a in server_afflictions if not a.is_birth_defect]
+
+            await roll(
+                interaction,
+                dino,
+                server.minor_affliction_chance if roll_type == "minor" else server.affliction_chance,
+                models.Season(season),
+                affliction_pool
+            )
 
         @group.command(name="list", description="Lists all available afflictions")
         @app_commands.describe(page="What page to display")
         async def list_afflictions(interaction: discord.Interaction, page: int = 1):
-            sorted_afflictions = AfflictionController.list_afflictions(
-                self.data.get_affliction_list(interaction.guild_id),
-                page)
+            server: models.Server = self.database.get_server(interaction.guild_id, interaction.guild.name)
+            server_afflictions: list[models.Affliction] = self.database.get_afflictions(server.id)
+            sorted_afflictions: list[models.Affliction] = af.list_afflictions(server_afflictions)
 
-            length = len(sorted_afflictions)
-
-            pages = math.ceil(length / 10)
+            pages = math.ceil(len(sorted_afflictions) / 10)
 
             if page < 1 or page > pages:
                 await interaction.response.send_message(
-                    f"Page {page} does not exist. There are only {pages} pages.")
+                    f"Page {page} does not exist. There are only {pages} pages."
+                )
                 return
 
             start = (page - 1) * 10
             end = start + 10
-            sorted_afflictions = sorted_afflictions[start:end]
+            sorted_afflictions = sorted_afflictions[start: end]
 
-            # Create embeds for each affliction
-            embeds = [AfflictionController.get_embed(affliction) for affliction in sorted_afflictions]
+            embeds = [af.get_embed(a) for a in sorted_afflictions]
 
-            # Add page number to the last embed's footer
             if embeds:
                 embeds[-1].set_footer(text=f"Page {page}/{pages}")
 
-            await interaction.response.send_message(f"**Available Afflictions:** (Page {page}/{pages})",
-                                                    embeds=embeds)
-            self.logger.log(f"{interaction.user.name} listed all afflictions", "Bot")
+            await interaction.response.send_message(f"**Available Afflictions:** (Page {page}/{pages})", embeds=embeds)
 
         @group.command(name="add", description="Adds a new affliction to the database")
         @app_commands.describe(name="Name of the affliction", description="Description of the affliction",
                                rarity="Rarity of the affliction",
                                is_minor="Whether the affliction is minor or not. ONLY AFFECTS COMMON RARITY",
                                is_birth_defect="Whether the affliction is birth defect",
-                               season="The season that the user can get the affliction in")
+                               seasons="Seasons that the affliction can occur. Separate with commas (,) and type any for any season")
         @app_commands.choices(
             rarity=[
                 app_commands.Choice(name="Common", value="common"),
                 app_commands.Choice(name="Uncommon", value="uncommon"),
                 app_commands.Choice(name="Rare", value="rare"),
-                app_commands.Choice(name="Ultra Rare", value="ultra rare")
-            ],
-            season=[
-                app_commands.Choice(name="Any", value="any"),
-                app_commands.Choice(name="Wet Season", value="wet"),
-                app_commands.Choice(name="Dry Season", value="dry"),
+                app_commands.Choice(name="Legendary", value="legendary")
             ]
         )
         @app_commands.checks.has_permissions(administrator=True)
-        async def add_affliction(interaction: discord.Interaction, name: str, description: str,
-                                 rarity: app_commands.Choice[str], is_minor: bool = False,
-                                 is_birth_defect: bool = False,
-                                 season: app_commands.Choice[str] = "any"):
-            # Check if the affliction already exists
-            if self._if_affliction_exists(name, interaction.guild_id):
-                await interaction.response.send_message(f"Affliction '{name}' already exists.", ephemeral=True)
+        async def add_affliction(
+                interaction: discord.Interaction,
+                name: str, description: str,
+                rarity: str, is_minor: bool = False,
+                is_birth_defect: bool = False, seasons: str = "any"):
+            if af.affliction_exists(name, self.database.get_afflictions(interaction.guild_id)):
+                await interaction.response.send_message(f"Affliction `{name}` already exists.", ephemeral=True)
                 return
 
-            new_affliction = Affliction(name=name, description=description, rarity=rarity.value, is_minor=is_minor,
-                                        is_birth_defect=is_birth_defect,
-                                        season=season.value if season.value != "any" else None)
-            self.data.get_affliction_list(interaction.guild_id).append(new_affliction)
+            seasons_input = [s.strip().lower() for s in seasons.split(",")]
+            valid_season_values = [s.value for s in models.Season]
+            invalid_seasons = [s for s in seasons_input if s not in valid_season_values]
 
-            await interaction.response.send_message(f"Affliction '{name}' added successfully.",
-                                                    embed=AfflictionController.get_embed(new_affliction),
+            if invalid_seasons:
+                await interaction.response.send_message(
+                    f"Invalid seasons: `{', '.join(invalid_seasons)}`. Valid options are: `{', '.join(valid_season_values)}`",
+                    ephemeral=True
+                )
+                return
+
+            new_affliction = models.Affliction(
+                id=-1,  # Temporary setting of ID, we discard this value and use databases generated serial
+                server_id=-1,  # We discard this one too
+                title=name,
+                description=description,
+                rarity=models.Rarity(rarity),
+                is_minor=is_minor,
+                is_birth_defect=is_birth_defect,
+                seasons=[models.Season(s) for s in seasons_input],
+            )
+            self.database.add_affliction(interaction.guild_id, new_affliction)
+
+            await interaction.response.send_message(f"Affliction `{name}` added.", embed=af.get_embed(new_affliction),
                                                     ephemeral=True)
-            self.logger.log(f"{interaction.user.name} added affliction {name}", "Bot")
 
         @group.command(name="remove", description="Removes an affliction from the list")
-        @app_commands.describe(name="Name of the affliction")
+        @app_commands.describe(affliction_id="The ID of the affliction")
         @app_commands.checks.has_permissions(administrator=True)
-        async def remove_affliction(interaction: discord.Interaction, name: str):
-            # Check if the affliction does not exist
-            if not self._if_affliction_exists(name, interaction.guild_id):
-                await interaction.response.send_message(f"Affliction '{name}' does not exist.", ephemeral=True)
-                return
+        async def remove_affliction(interaction: discord.Interaction, affliction_id: int):
+            affliction = self.database.get_affliction(affliction_id)
+            self.database.remove_affliction(affliction_id)
+            await interaction.response.send_message(f"Affliction {affliction.title} removed.", ephemeral=True)
 
-            affliction_to_remove = self._get_affliction_from_name(name, interaction.guild_id)[0]
-            self.data.get_affliction_list(interaction.guild_id).remove(affliction_to_remove)
+        @remove_affliction.autocomplete("affliction_id")
+        async def remove_affliction_autocomplete(interaction: discord.Interaction, current: str):
+            return await affliction_autocomplete(interaction, current)
 
-            embed = AfflictionController.get_embed(affliction_to_remove)
-            embed.set_footer(text="Affliction removed")
-
-            await interaction.response.send_message(f"Affliction '{name}' removed successfully.", embed=embed,
-                                                    ephemeral=True)
-            self.logger.log(f"{interaction.user.name} removed affliction {name}", "Bot")
-
-        @group.command(name="edit", description="Edits an affliction from the list")
-        @app_commands.describe(affliction="Current name of the affliction",
-                               name="New name for the affliction",
-                               description="New description of the affliction",
-                               rarity="New rarity of the affliction",
+        @group.command(name="edit", description="Edits an affliction")
+        @app_commands.describe(affliction_id="The ID of the affliction",
+                               name="Name of the affliction", description="Description of the affliction",
+                               rarity="Rarity of the affliction",
                                is_minor="Whether the affliction is minor or not. ONLY AFFECTS COMMON RARITY",
                                is_birth_defect="Whether the affliction is birth defect",
-                               season="The season that the user can get the affliction in")
+                               seasons="Seasons that the affliction can occur. Separate with commas (,) and type any for any season")
         @app_commands.choices(
             rarity=[
                 app_commands.Choice(name="Common", value="common"),
                 app_commands.Choice(name="Uncommon", value="uncommon"),
                 app_commands.Choice(name="Rare", value="rare"),
-                app_commands.Choice(name="Ultra Rare", value="ultra rare")
-            ],
-            season=[
-                app_commands.Choice(name="Any", value="any"),
-                app_commands.Choice(name="Wet Season", value="wet"),
-                app_commands.Choice(name="Dry Season", value="dry"),
+                app_commands.Choice(name="Legendary", value="legendary")
             ]
         )
         @app_commands.checks.has_permissions(administrator=True)
-        async def edit_affliction(interaction: discord.Interaction, affliction: str, name: str = None,
-                                  description: str = None, rarity: app_commands.Choice[str] = None,
-                                  is_minor: bool = False, is_birth_defect: bool = False,
-                                  season: app_commands.Choice[str] = None, ):
-            # Check if the affliction exists
-            if not self._if_affliction_exists(affliction, interaction.guild_id):
-                await interaction.response.send_message(f"Affliction '{affliction}' does not exist.",
-                                                        ephemeral=True)
+        async def edit_affliction(interaction: discord.Interaction,
+                                  affliction_id: int, name: str = None, description: str = None,
+                                  rarity: str = None, is_minor: bool = None, is_birth_defect: bool = None,
+                                  seasons: str = None):
+            afflictions = self.database.get_afflictions(interaction.guild_id)
+            if af.affliction_exists(name, afflictions):
+                await interaction.response.send_message(f"Affliction `{name}` already exists.", ephemeral=True)
                 return
 
-            # Check if the new name already exists (if name is being changed)
-            if name and name != affliction and self._if_affliction_exists(name, interaction.guild_id):
-                await interaction.response.send_message(f"Affliction with name '{name}' already exists.",
-                                                        ephemeral=True)
+            original_affliction = next((a for a in afflictions if a.id == affliction_id), None)
+            if original_affliction is None:
+                await interaction.response.send_message(f"Affliction `{affliction_id}` does not exist.", ephemeral=True)
                 return
 
-            affliction_to_edit, index = self._get_affliction_from_name(affliction, interaction.guild_id)
+            seasons_input = [s.strip().lower() for s in seasons.split(",")]
+            valid_season_values = [s.value for s in models.Season]
+            invalid_seasons = [s for s in seasons_input if s not in valid_season_values]
 
-            if name:
-                affliction_to_edit.name = name
-            if description:
-                affliction_to_edit.description = description
-            if rarity:
-                affliction_to_edit.rarity = rarity.value
-            if is_minor:
-                affliction_to_edit.is_minor = is_minor
-            if is_birth_defect:
-                affliction_to_edit.is_birth_defect = is_birth_defect
-            if season:
-                affliction_to_edit.season = season
+            if invalid_seasons:
+                await interaction.response.send_message(
+                    f"Invalid seasons: `{', '.join(invalid_seasons)}`. Valid options are: `{', '.join(valid_season_values)}`",
+                    ephemeral=True
+                )
+                return
 
-            self.data.get_affliction_list(interaction.guild_id)[index] = affliction_to_edit
+            new_affliction = models.Affliction(
+                id=affliction_id,
+                server_id=original_affliction.server_id,
+                title=name if name is not None else original_affliction.title,
+                description=description if description is not None else original_affliction.description,
+                rarity=models.Rarity(rarity) if rarity is not None else original_affliction.rarity,
+                is_minor=is_minor if is_minor is not None else original_affliction.is_minor,
+                is_birth_defect=is_birth_defect if is_birth_defect is not None else original_affliction.is_birth_defect,
+                seasons=[models.Season(s) for s in
+                         seasons_input] if seasons is not None else original_affliction.seasons
+            )
 
-            await interaction.response.send_message(f"Affliction '{affliction}' edited successfully.",
-                                                    embed=AfflictionController.get_embed(affliction_to_edit),
-                                                    ephemeral=True)
-            self.logger.log(f"{interaction.user.name} edited affliction {affliction}", "Bot")
+            self.database.edit_affliction(interaction.guild_id, affliction_id, new_affliction)
 
-        # --- Handling Errors --- #
-        # roll_general.error(self.command_error_handler)
-        list_afflictions.error(self.command_error_handler)
-        add_affliction.error(self.command_error_handler)
-        remove_affliction.error(self.command_error_handler)
-        edit_affliction.error(self.command_error_handler)
+        @edit_affliction.autocomplete("affliction_id")
+        async def edit_affliction_autocomplete(interaction: discord.Interaction, current: str):
+            return await affliction_autocomplete(interaction, current)
+
+        async def affliction_autocomplete(interaction: discord.Interaction, current: str):
+            filtered = [
+                a for a in self.database.get_afflictions(interaction.guild_id)
+                if a.title.startswith(current)
+            ]
+            return [
+                app_commands.Choice(
+                    name=f"Title: {a.title} | ID: {a.id}",
+                    value=a.id
+                ) for a in filtered[:25]
+            ]
 
         return group
 
     def _register_berry_commands(self) -> app_commands.Group:
-        """Register berry-related commands as a command group."""
+        group = app_commands.Group(name="berries", description="Berry commands")
 
-        # Create the berries group and add it to the command tree
-        berries_group = app_commands.Group(name="berries", description="Berry commands")
+        async def gather(interaction: discord.Interaction, outcomes, target: Optional[discord.Member]):
+            old_balance = self.database.get_berries_balance(interaction.user.id, interaction.guild_id)
+            outcome: models.GatherOutcome = gathers.roll_gathering_outcome(outcomes)
 
-        async def gather(interaction: discord.Interaction, gather_type: Literal["hunt", "steal"],
-                         target: Optional[discord.Member]):
-            old_balance = self._validate_user(interaction.user.id, interaction.guild_id)
-            outcome: GatherOutcome = self._roll_for_gathering_occurrence(interaction.guild_id, gather_type)
-
-            # If we steal, we need to remove the berries from the target's balance, but cant put them in negatives
-            if gather_type == "steal" and target:
+            if target is None:
+                # Just gather, ignore robberies
+                pass
+            else:
                 if target.id == interaction.user.id:
-                    await interaction.response.send_message(
-                        "You cannot steal from yourself! Try hunting instead.",
-                        ephemeral=True)
+                    await interaction.response.send_message("You can't steam from yourself! Try hunting instead.",
+                                                            ephemeral=True)
                     return
-                target_balance = self._validate_user(target.id, interaction.guild_id)
+                target_balance = self.database.get_berries_balance(target.id, interaction.guild_id)
                 if target_balance <= 0:
-                    await interaction.response.send_message(
-                        f"{target.display_name} has no berries to steal from.",
-                        ephemeral=True)
+                    await interaction.response.send_message(f"{target.display_name} has no berries to steal from.",
+                                                            ephemeral=True)
                     return
 
-                # Calculate how much we can actually steal (don't go below 0)
                 if outcome.value >= 0:
                     actual_steal_amount = min(outcome.value, target_balance)
                 else:
                     actual_steal_amount = outcome.value
+
                 target_new_balance = target_balance - actual_steal_amount
 
-                print(
-                    f"Target balance: {target_balance}, Attempted steal: {outcome.value}, Actual steal: {actual_steal_amount}")
-                print(f"Target new balance: {target_new_balance}")
-
-                # Update the outcome value to reflect what was actually stolen
                 outcome.value = actual_steal_amount
+                self.database.set_berries_balance(target.id, interaction.guild_id, target_new_balance)
 
-                self.data.set_user_balance(target.id, target_new_balance)
-
-            self.data.set_user_balance(interaction.user.id,
-                                       self.data.get_user_balance(interaction.user.id) + outcome.value)
+            new_balance = old_balance + outcome.value
+            self.database.set_berries_balance(interaction.user.id, interaction.guild_id, new_balance)
 
             await interaction.response.send_message(
-                embed=get_outcome_embed(gather_type, outcome, old_balance,
-                                        self.data.get_user_balance(interaction.user.id),
-                                        target if target else None, interaction),
-                ephemeral=False)
+                embed=gathers.get_embed(outcome, old_balance, new_balance, target, interaction),
+                ephemeral=False
+            )
 
-        @berries_group.command(name="hunt", description="Hunt for some berries")
-        @app_commands.checks.cooldown(1, 43200, key=lambda i: i.user.id)  # Uncomment to enable cooldown
+        @group.command(name="hunt", description="Hunt for some berries")
+        @app_commands.checks.cooldown(1, 43200, key=lambda i: i.user.id)
         async def hunt(interaction: discord.Interaction):
-            await gather(interaction, "hunt", None)
+            outcomes = self.database.get_gather_outcomes(interaction.guild_id)
+            await gather(interaction, [o for o in outcomes if not o.is_robbery], None)
 
-        @berries_group.command(name="steal", description="Attempt to steal berries from the herd")
+        @group.command(name="steal", description="Steal some berries")
         @app_commands.describe(target="User to steal from")
-        @app_commands.checks.cooldown(1, 43200, key=lambda i: i.user.id)  # Uncomment to enable cooldown
+        @app_commands.checks.cooldown(1, 43200, key=lambda i: i.user.id)
         async def steal(interaction: discord.Interaction, target: discord.Member):
-            await gather(interaction, "steal", target)
+            outcomes = self.database.get_gather_outcomes(interaction.guild_id)
+            await gather(interaction, [o for o in outcomes if o.is_robbery], target)
 
-        @berries_group.command(name="balance", description="Check your berry balance")
-        @app_commands.checks.cooldown(5, 120, key=lambda i: i.user.id)  # Uncomment to enable cooldown
+        @group.command(name="balance", description="Check your berry balance")
+        @app_commands.checks.cooldown(1, 120, key=lambda i: i.user.id)
         async def balance(interaction: discord.Interaction):
-            # Retrieve user's current balance
-            current_balance = self._validate_user(interaction.user.id, interaction.guild_id)
+            current_balance = self.database.get_berries_balance(interaction.user.id, interaction.guild_id)
 
             embed = discord.Embed(
-                title="🍒 Berry Balance",
+                title=":cherries: Berry Balance",
                 description=f"You currently have **{current_balance}** berries.",
                 color=discord.Color.blue()
             )
 
             await interaction.response.send_message(embed=embed, ephemeral=False)
 
-        @berries_group.command(name="gift", description="Gift berries to another user")
-        @app_commands.describe(user="User to gift berries to", amount="Amount of berries to gift")
-        @app_commands.checks.cooldown(5, 60, key=lambda i: i.user.id)  # Uncomment to enable cooldown
-        async def gift_berries(interaction: discord.Interaction, user: discord.Member, amount: int):
-            # Initialize user
-            self._validate_user(user.id, interaction.guild_id)
+        @group.command(name="gift", description="Gift some berries to another user")
+        @app_commands.describe(target="User to gift to", amount="The amount of berries to give")
+        @app_commands.checks.cooldown(1, 120, key=lambda i: i.user.id)
+        async def gift(interaction: discord.Interaction, target: discord.Member, amount: int):
+            old_balance = self.database.get_berries_balance(interaction.user.id, interaction.guild_id)
+            target_balance = self.database.get_berries_balance(target.id, interaction.guild_id)
 
-            # Check if the user has enough berries
-            if amount > self._validate_user(interaction.user.id, interaction.guild_id):
-                await interaction.response.send_message(
-                    f"You don't have enough berries to gift that much.\n-# Your balance: {self._validate_user(interaction.user.id, interaction.guild_id)}.",
-                    ephemeral=True)
-                return
             if amount < 1:
+                await interaction.response.send_message("You can't send less than 1 berry.", ephemeral=True)
+                return
+            if amount > old_balance:
                 await interaction.response.send_message(
-                    f"You can't gift less than 1 berry.",
+                    f"You dont have enough berries to gift that much. \n-# Your balance: {old_balance}.",
                     ephemeral=True)
                 return
-            # Deduct berries from the user's balance
-            user_balance = self.data.get_user_balance(interaction.user.id)
-            recipient_balance = self.data.get_user_balance(user.id)
 
-            self.data.set_user_balance(interaction.user.id, user_balance - amount)
-            self.data.set_user_balance(user.id, recipient_balance + amount)
+            new_balance = old_balance - amount
+            target_new_balance = target_balance + amount
 
-            # Let them know that berries were gifted
+            self.database.set_berries_balance(interaction.user.id, interaction.guild_id, new_balance)
+            self.database.set_berries_balance(target.id, interaction.guild_id, target_new_balance)
+
             await interaction.response.send_message(
-                f"{interaction.user.display_name.split(' |')[0]} gave {user.display_name.split(' |')[0]} {amount} berries!")
+                f"{interaction.user.display_name} gave {target.display_name} {amount} berries.", ephemeral=False)
 
-        @berries_group.command(name="set", description="Set the balance of a user")
-        @app_commands.describe(user="User to edit balance", new_balance="New balance")
+        @group.command(name="set", description="Sets the balance of a user")
+        @app_commands.describe(target="User to set", new_balance="The new balance of the user")
         @app_commands.checks.has_permissions(administrator=True)
-        async def set_berries(interaction: discord.Interaction, user: discord.Member, new_balance: int):
-            # Initialize user
-            self._validate_user(user.id, interaction.guild_id)
-
-            # Add berries to the user's balance
-            self.data.set_user_balance(user.id, new_balance)
-
-            await interaction.response.send_message(f"Added {new_balance} berries to {user.name}'s balance.",
+        async def set_balance(interaction: discord.Interaction, target: discord.Member, new_balance: int):
+            self.database.set_berries_balance(interaction.user.id, interaction.guild_id, new_balance)
+            await interaction.response.send_message(f"Set {target.display_name} balance to {new_balance}.",
                                                     ephemeral=True)
 
-        @berries_group.command(name="leaderboard", description="Show the leaderboard of who has the most berries")
-        @app_commands.describe(count="The amount of leaderboard slots shown. use a number less than 0 to show all rankings")
-        @app_commands.checks.cooldown(5, 60, key=lambda i: i.user.id)
-        async def leaderboard(interaction: discord.Interaction, count: int = 10):
-            embed = discord.Embed(title="=== Berries Leaderboard ===", description="", color=discord.Color.blue())
+        @group.command(name="leaderboard", description="Show a leaderboard of who has the most berries")
+        @app_commands.checks.cooldown(1, 120, key=lambda i: i.user.id)
+        async def leaderboard(interaction: discord.Interaction):
+            embed = discord.Embed(title="━━━ Berries Leaderboard ━━━", description="", color=discord.Color.blue())
 
-            sorted_berries = dict(sorted(self.data.balances.items(), key=lambda x: x[1], reverse=True))
-            
-            if count < 0:
-                count = len(sorted_berries)
+            sorted_berries = sorted(self.database.get_berries(interaction.guild_id), key=lambda u: u.balance,
+                                    reverse=True)
 
-            i = 0
-            for key, value in sorted_berries.items():
-                if i >= count:
+            for i, user in enumerate(sorted_berries):
+                if i > min(10, len(sorted_berries)):
                     break
-
-                # Checking if member is in the guild
-                member = interaction.guild.get_member(key)
+                member = interaction.guild.get_member(user.id)
                 if not member:
                     continue
-                elif member.name == "pagget":
+                elif member.id == self.user.id:
                     continue
-
-                embed.description += f"{i + 1}: {":crown:" if i == 0 else ""} {member.display_name.split(" |")[0]} {value}\n"
-                # Increase iteration counter
+                embed.description += f"{i + 1} | {':crown:' if i == 0 else ''} {member.display_name} {user.balance}\n"
                 i += 1
-            await interaction.response.send_message(embed=embed)
-          
-        # Handling errors
-        hunt.error(self.command_error_handler)
-        steal.error(self.command_error_handler)
-        balance.error(self.command_error_handler)
-        set_berries.error(self.command_error_handler)
 
-        # Add gambling commands to the berries group
-        berries_group.add_command(self._register_gambling_commands())
+            await interaction.response.send_message(embed=embed, ephemeral=False)
 
-        return berries_group
+        return group
 
     def _register_gambling_commands(self) -> app_commands.Group:
-        gambling_group = app_commands.Group(name="gambling", description="Gambling commands")
+        group = app_commands.Group(name="gambling", description="Gambling commands")
 
-        @gambling_group.command(name="roulette", description="Play roulette with your berries")
+        @group.command(name="roulette", description="Play roulette with your berries")
         @app_commands.describe(bet="Amount of berries to bet")
         @app_commands.choices(
             bet_type=[
-                app_commands.Choice(name=name, value=value) for value, name in self.roulette_bet_types.items()
+                app_commands.Choice(
+                    name=bet.value.title(), value=bet.name
+                ) for bet in RouletteBet
             ]
         )
-        @app_commands.checks.cooldown(1, 10, key=lambda i: i.user.id)  # Uncomment to enable cooldown
+        @app_commands.checks.cooldown(1, 120, key=lambda i: i.user.id)
         async def roulette(interaction: discord.Interaction, bet: int, bet_type: str):
-            if bet > self._validate_user(interaction.user.id, interaction.guild_id):
+            server = self.database.get_server(interaction.guild_id, interaction.guild.name)
+            user_balance = self.database.get_berries_balance(interaction.user.id, interaction.guild_id)
+            if bet > user_balance:
                 await interaction.response.send_message(
-                    f"You don't have enough berries to bet that much.\n-# Your balance: {self._validate_user(interaction.user.id, interaction.guild_id)}.",
+                    f"You dont have enough berries to bet that much.\n-# You have {user_balance} berries.",
                     ephemeral=True)
                 return
-            if self.data.get_guild_config(interaction.guild_id).minimum_bet > bet:
+
+            if bet < server.minimum_bet:
                 await interaction.response.send_message(
-                    f"You bet *{bet}*, but the minimum bet is **{self.data.get_guild_config(interaction.guild_id).minimum_bet}**.")
-                return
+                    f"You bet *{bet}*, but the minimum bet is **{server.minimum_bet}**.",
+                    ephemeral=True)
 
-            balance = self.data.get_user_balance(interaction.user.id)
-
-            self.data.set_user_balance(interaction.user.id, balance - bet)
-
-            game = Roulette(interaction.user, bet, bet_type, self.roulette_bet_types, self.data,
-                            self._validate_user,
-                            self.data.get_guild_config(interaction.guild_id).minimum_bet)
+            self.database.add_berries_balance(interaction.user.id, interaction.guild_id, -bet)
+            game = Roulette(interaction.user, bet, RouletteBet(bet_type), self.database, server)
             await game.run(interaction)
 
-        @gambling_group.command(name="slots", description="Play slots with your berries")
+        @group.command(name="slots", description="Play slots with your berries")
         @app_commands.describe(bet="Amount of berries to bet")
-        @app_commands.checks.cooldown(1, 10, key=lambda i: i.user.id)  # Uncomment to enable cooldown
+        @app_commands.checks.cooldown(1, 120, key=lambda i: i.user.id)
         async def slots(interaction: discord.Interaction, bet: int):
-            if bet > self._validate_user(interaction.user.id, interaction.guild_id):
+            server = self.database.get_server(interaction.guild_id, interaction.guild.name)
+            user_balance = self.database.get_berries_balance(interaction.user.id, interaction.guild_id)
+            if bet > user_balance:
                 await interaction.response.send_message(
-                    f"You don't have enough berries to bet that much.\n-# Your balance: {self._validate_user(interaction.user.id, interaction.guild_id)}.",
-                    ephemeral=True)
-                return
-            if self.data.get_guild_config(interaction.guild_id).minimum_bet > bet:
-                await interaction.response.send_message(
-                    f"You bet *{bet}*, but the minimum bet is **{self.data.get_guild_config(interaction.guild_id).minimum_bet}**.",
+                    f"You dont have enough berries to bet that much.\n-# You have {user_balance} berries.",
                     ephemeral=True)
                 return
 
-            game = Slots(interaction.user, bet, self.data,
-                         self.data.get_guild_config(interaction.guild_id).minimum_bet)
+            if bet < server.minimum_bet:
+                await interaction.response.send_message(
+                    f"You bet *{bet}*, but the minimum bet is **{server.minimum_bet}**.",
+                    ephemeral=True)
+                return
+
+            game = Slots(interaction.user, bet, self.database, server)
             await game.run(interaction)
 
-        @gambling_group.command(name="blackjack", description="Play blackjack with your berries")
+        @group.command(name="blackjack", description="Play blackjack with your berries")
         @app_commands.describe(bet="Amount of berries to bet")
-        @app_commands.checks.cooldown(1, 10, key=lambda i: i.user.id)  # Uncomment to enable cooldown
+        @app_commands.checks.cooldown(1, 120, key=lambda i: i.user.id)
         async def blackjack(interaction: discord.Interaction, bet: int):
-            # If the minimum bet is greater than the bet, or the bet is greater than the user's balance, return an error
-            if bet > self._validate_user(interaction.user.id, interaction.guild_id):
+            server = self.database.get_server(interaction.guild_id, interaction.guild.name)
+            user_balance = self.database.get_berries_balance(interaction.user.id, interaction.guild_id)
+            if bet > user_balance:
                 await interaction.response.send_message(
-                    f"You don't have enough berries to bet that much.\n-# Your balance: {self._validate_user(interaction.user.id, interaction.guild_id)}.",
-                    ephemeral=True)
-                return
-            if self.data.get_guild_config(interaction.guild_id).minimum_bet > bet:
-                await interaction.response.send_message(
-                    f"You bet *{bet}*, but the minimum bet is **{self.data.get_guild_config(interaction.guild_id).minimum_bet}**.",
+                    f"You dont have enough berries to bet that much.\n-# You have {user_balance} berries.",
                     ephemeral=True)
                 return
 
-            user_balance = self.data.get_user_balance(interaction.user.id)
-            self.data.set_user_balance(interaction.user.id, user_balance - bet)
+            if bet < server.minimum_bet:
+                await interaction.response.send_message(
+                    f"You bet *{bet}*, but the minimum bet is **{server.minimum_bet}**.", ephemeral=True)
+                return
 
-            game = Blackjack(interaction.user, bet, self.data.balances)
+            self.database.add_berries_balance(interaction.user.id, interaction.guild_id, -bet)
+            game = Blackjack(interaction.user, bet, self.database, server)
             await game.run(interaction)
 
-        @roulette.error
-        async def set_configs_error(interaction: discord.Interaction, error: app_commands.AppCommandError):
-            await read_error([interaction], error, self.logger)
+        return group
 
-        @slots.error
-        async def set_configs_error(interaction: discord.Interaction, error: app_commands.AppCommandError):
-            await read_error([interaction], error, self.logger)
-
-        @blackjack.error
-        async def set_configs_error(interaction: discord.Interaction, error: app_commands.AppCommandError):
-            await read_error([interaction], error, self.logger)
-
-        return gambling_group
-
-    async def command_error_handler(self, interaction: discord.Interaction, error: app_commands.AppCommandError):
-        await read_error([interaction], error, self.logger)
-
-    def _register_events(self):
-        """Register Discord client events."""
-
-        @self.client.event
-        async def on_ready():
-            # Clear all commands and re-sync
-
-            self.console.clear()
-            self.console.rule(f"[bold]{self.client.user.name}[/]")  # Added bold for emphasis
-
-            self.console.print(f"Bot activated as {self.client.user}")
-            self.logger.log(f"{self.client.user.name} has logged in as {self.client.user}", "Bot")
-
-            self.console.print("\nConnected Guilds:")
-            self.logger.log(f"{self.client.user.name} connected to {len(self.client.guilds)} guilds:", "Bot")
-
-            for guild in self.client.guilds:
-                member_str = f"{guild.member_count} member{'s' if guild.member_count > 1 else ''}"
-                self.console.print(f"  • [green]{guild.name}[/] ({guild.id}) - {member_str}")
-                self.logger.log(f"    * Guild: {guild.name} ({guild.id}) {member_str}", "Bot")
-
-            # If syncing is enabled, sync the command tree
-            # NOTE: Using 'bot.tree' in the guild sync section, ensure 'bot' is defined or use 'self.tree' consistently
-            # if any(arg == "--sync" for arg in sys.argv):
-            if True:
-                self.console.print("\n[green]Syncing command tree globally...[/]")
-                self.logger.log("Syncing command tree globally...", "Bot")
-                self.console.print("[yellow]Warning: Avoid syncing commands too often to avoid rate limits...[/]")
-                self.console.print("[yellow]Warning: Syncing commands may take a while...[/]")
-                try:
-                    await self.tree.sync()
-                    self.console.print("[green]Command tree synced globally[/]")
-                    self.logger.log("Command tree synced globally", "Bot")
-                except Exception as e:
-                    self.console.print(f"[red]Error syncing command tree globally: {e}[/]")
-                    self.logger.log(f"Error syncing command tree globally: {e}", "BotError")
-
-
-            elif any(arg == "--sync-guild" for arg in sys.argv):
-                self.console.print("\nPlease select a guild to sync the command tree with:")
-                if not self.client.guilds:
-                    self.console.print("[yellow]Bot is not in any guilds to sync with.[/]")
-                    self.logger.log("Sync-guild attempted but bot is not in any guilds.", "Bot")
-                else:
-                    for i, guild in enumerate(self.client.guilds):
-                        self.console.print(
-                            f"  • [cyan]{i + 1}[/] {guild.name} ({guild.id})")  # Changed color for number
-
-                    try:
-                        guild_choice = input("Enter the number of the guild to sync with (or 0 to cancel): ")
-                        guild_index = int(guild_choice) - 1
-                        if guild_choice == '0':
-                            self.console.print("[yellow]Syncing cancelled.[/]")
-                            self.logger.log("Guild sync cancelled by user.", "Bot")
-                        elif 0 <= guild_index < len(self.client.guilds):
-                            guild = self.client.guilds[guild_index]
-                            self.console.print(f"\n[green]Syncing command tree with {guild.name} ({guild.id})...[/]")
-                            self.logger.log(f"Syncing command tree with guild: {guild.name} ({guild.id})", "Bot")
-                            self.console.print(
-                                "[yellow]Clearing existing commands in guild and copying global commands...[/]")
-
-                            # Ensure using self.tree consistently
-                            self.tree.clear_commands(guild=guild)
-                            self.tree.copy_global_to(guild=guild)
-                            await self.tree.sync(guild=guild)
-
-                            self.console.print(f"[green]Command tree synced with {guild.name} ({guild.id})[/]")
-                            self.logger.log(f"Command tree synced with guild: {guild.name} ({guild.id})", "Bot")
-                        else:
-                            self.console.print("[red]Invalid guild number. Syncing aborted.[/]")
-                            self.logger.log("Invalid guild number provided for sync. Syncing aborted.", "Bot")
-                    except ValueError:
-                        self.console.print("[red]Invalid input. Please enter a number. Syncing aborted.[/]")
-                        self.logger.log("Non-numeric input for guild sync selection. Syncing aborted.", "Bot")
-                    except Exception as e:
-                        self.console.print(f"[red]Error syncing command tree with guild: {e}[/]")
-                        self.logger.log(f"Error syncing command tree with guild: {e}", "BotError")
-
-            self.console.print("\n[bold underline]Registered Commands:[/]")
-            self.logger.log("Registered Commands:", "Bot")
-
-            # Separate top-level groups and standalone commands
-            groups = {}
-            standalone_commands = []
-
-            # Initial categorization of top-level commands
-            for command in self.tree.get_commands():
-                if isinstance(command, app_commands.Group):
-                    groups[command.name] = command
-                else:
-                    standalone_commands.append(command)
-
-            # Print command groups (top-level)
-            if groups:
-                self.console.print("\n[green bold]Command Groups:[/]")
-                for group_name, group in sorted(groups.items()):  # Sort top-level groups
-                    try:
-                        # Assuming has_admin_check is defined elsewhere and accessible
-                        is_admin_group = has_admin_check(group)
-                    except NameError:
-                        self.logger.log(
-                            f"Warning: has_admin_check function not found for group '{group_name}'. Assuming USER.",
-                            "Bot")
-                        is_admin_group = False
-
-                    admin_status_group = "[purple]ADMIN[/]" if is_admin_group else "[green]USER[/]"
-                    self.console.print(f"  [bold]/{group.name}[/] {admin_status_group} - {group.description}")
-                    self.logger.log(f"  Group: /{group.name} {admin_status_group} - {group.description}",
-                                    "Bot")  # Added status to log
-
-                    # Sets the initial indentation and path for items under this top-level group.
-                    initial_sub_item_indent = "    "
-                    sorted_sub_items = sorted(group.commands, key=lambda c: c.name)  # Sort sub-items
-                    for sub_item in sorted_sub_items:
-                        # Pass the group's name as the initial part of the path
-                        self._print_command_item_recursive(sub_item, initial_sub_item_indent, [group.name])
-
-            if standalone_commands:
-                self.console.print("\n[green bold]Standalone Commands:[/]")
-                for command in sorted(standalone_commands, key=lambda x: x.name):  # Sort standalone commands
-                    try:
-                        is_admin_cmd = has_admin_check(command)
-                    except NameError:
-                        self.logger.log(
-                            f"Warning: has_admin_check function not found for command '{command.name}'. Assuming USER.",
-                            "Bot")
-                        is_admin_cmd = False
-
-                    admin_status_cmd = "[purple]ADMIN[/]" if is_admin_cmd else "[green]USER[/]"
-                    self.console.print(f"  [bold]/{command.name}[/] {admin_status_cmd} - {command.description}")
-                    self.logger.log(f"  Command: /{command.name} {admin_status_cmd} - {command.description}",
-                                    "Bot")  # Added status to log
-
-            if not groups and not standalone_commands:
-                self.console.print("  [yellow]No application commands found or registered.[/]")
-                self.logger.log("No application commands found or registered.", "Bot")
-
-            # Load data and start autosaving
-            self.data.load()
-            self.data.start_autosave_thread()
-
-            # Final ready message
-            self.console.print("\n[bold green]Bot is ready and online![/]")
-            self.logger.log("Bot is ready and online!", "Bot")
-
-        @self.client.event
-        async def on_message(message: discord.Message):
-            favored_ones = [767047725333086209, 953401260306989118, 757757494192767017]
-
-            love_message_flags = [
-                "thx",
-                "thanks",
-                "thank",
-                "love"
-            ]
-            love_responses = [
-                ":heart:",
-                "Anything for you pookie :para_love:",
-                "Your welcome!",
-                "You too\n-# Shoot, wrong thing :para_sweat:",
-                "<a:para_dance:1349156824439324732>",
-                "<:para_sparkle:1349157954603061299>",
-                "<:para_cool:1349156483564310629>"
-            ]
-
-            hate_message_flags = [
-                "suck",
-                "die",
-                "bozo",
-                "loser",
-                "stupid",
-                "hate"
-            ]
-            hate_responses = [
-                ":sob:",
-                "<:para_sweat:1349157654433370174>",
-                "<:para_sob:1349156486529421352>",
-                "<:para_angy:1349156485044895774>",
-                "<:para_tears:1349156487976587304>"
-            ]
-
-            bless_responses = [
-                "{name}, I bless you with {blessing} berries... and stuff :/",
-                "-# psst {name} I am giving you {blessing} out of the goodness of my heart, they dont really control me :wink:",
-                "The skies open above {name} and rains berries. {name} picks up {blessing}.",
-                "Hey {name}, catch!\n-# {blessing} berries fly towards {name}"
-            ]
-
-            if message.author == self.client.user:
-                return
-
-            # Handle messages here if needed
-            if (any(mention.id == self.client.user.id for mention in message.mentions) and
-                    message.content.startswith("-#")):
-                await message.channel.send("-# What was that? I couldn't hear you.")
-
-            # Only listen to the favored ones 😇
-            if message.author.id in favored_ones:
-                split_message = message.content.split(" ")
-                if "berries pls" in message.content.lower():
-                    if random.random() < 0.5:
-                        amount = random.randint(1, 1000)
-                        self.data.balances[message.author.id] = + amount
-                        await message.channel.send(f"Ok poor boy, I'll give you *{amount}* berries")
-                    else:
-                        await message.channel.send(f"Bro, stop being such a whiner. Just work :skull:")
-
-                for index, word in enumerate(split_message):
-                    if (word == "bless" and
-                            index + 2 < len(split_message) and
-                            split_message[index + 1].strip() and
-                            split_message[index + 2] == "with"):
-
-                        blessed_one: int = 0
-
-                        try:
-                            # Striping the users id out of the mention
-                            blessed_one = int(split_message[index + 1].translate(str.maketrans('', '', '<>@!')))
-                            if blessed_one == message.author.id:
-                                await message.channel.send(
-                                    f"What on earth are you trying to do? Blessing your self?? smh")
-                                break
-                            if blessed_one == self.client.user.id:
-                                await message.channel.send(
-                                    "I really love that you are trying to bless me, it really is nice... but I dont need them.")
-                                break
-
-                        except ValueError:
-                            print("Invalid mention")
-                            break
-
-                        if self._get_user_from_id(blessed_one, message.guild) is None:
-                            print("Mentioned non existent user.")
-
-                        blessing = split_message[index + 3]
-
-                        try:
-                            blessing = int(blessing)
-
-                            self._validate_user(blessed_one, message.guild.id)
-                            self.data.balances[blessed_one] += blessing
-
-                            await message.channel.send(random.choice(bless_responses).format(
-                                name=self._name_from_user(self._get_user_from_id(blessed_one, message.guild)),
-                                blessing=blessing))
-                        except ValueError:
-                            await message.channel.send(
-                                f"{self._name_from_user(self._get_user_from_id(blessed_one, message.guild))}, I bless you with {blessing}")
-
-                # Helpful for seeing how many berries people have
-                if "list berries" in message.content.lower():
-                    channel = message.channel
-                    send = ""
-                    for key in self.data.balances.keys():
-                        for user in message.guild.members:
-                            if user.id == key:
-                                send += f"{user.display_name.split(" |")[0]} has {self.data.balances[key]} berries\n"
-                    await channel.send(send)
-
-                for mean_word in hate_message_flags:
-                    if mean_word in message.content.lower() and "pagget" in message.content.lower():
-                        channel = message.channel
-                        await channel.send(random.choice(hate_responses))
-                        break
-
-                for mean_word in love_message_flags:
-                    if mean_word in message.content.lower() and "pagget" in message.content.lower():
-                        channel = message.channel
-                        await channel.send(random.choice(love_responses))
-                        break
-
-    @staticmethod
-    def _name_from_user(user: discord.User | discord.Member) -> str:
-        return user.display_name.split(" |")[0]
-
-    @staticmethod
-    def _get_user_from_id(user_id: int, guild: discord.Guild) -> Optional[discord.Member]:
-        for member in guild.members:
-            print(member.display_name, ":", member.id)
-            if member.id == user_id:
-                return member
-
-        return None
-
-    def _print_command_item_recursive(self, command_item, base_indent_str, parent_group_path_parts_for_log):
-        """
-        Recursively prints a command item (command or group) and its children if it's a group.
-        This is the core logic for handling nested groups.
-        """
-        prefix = "• "
-
-        current_full_path_parts = parent_group_path_parts_for_log + [command_item.name]
-        log_full_path = " ".join(current_full_path_parts)
-
-        # Determine if the command requires admin privileges (ensure has_admin_check is accessible)
-        try:
-            # Assuming has_admin_check is defined elsewhere and accessible
-            is_admin = has_admin_check(command_item)
-        except NameError:
-            # Fallback or default if it has_admin_check is not found - adjust as needed
-            self.logger.log(
-                f"Warning: has_admin_check function not found for command '{log_full_path}'. Assuming USER.", "Bot")
-            is_admin = False
-
-        admin_status = "[purple]ADMIN[/]" if is_admin else "[green]USER[/]"
-        description = getattr(command_item, 'description', 'No description available')
-
-        self.console.print(
-            f"{base_indent_str}{prefix}[bold]{command_item.name}[/] {admin_status} - {description}"
-        )
-
-        item_type_for_log = "Sub-Group" if isinstance(command_item, app_commands.Group) else "Subcommand"
-        self.logger.log(
-            f"{base_indent_str}{prefix}{item_type_for_log}: /{log_full_path} {admin_status} - {description}",
-            "Bot"
-        )
-
-        if isinstance(command_item, app_commands.Group):
-            child_base_indent_str = base_indent_str + "  "
-
-            sorted_sub_items = sorted(command_item.commands, key=lambda c: c.name)
-            for sub_item in sorted_sub_items:
-                self._print_command_item_recursive(sub_item, child_base_indent_str, current_full_path_parts)
-
-    def _roll_for_gathering_occurrence(self, guild_id: int, gather_type: Literal["hunt", "steal"]) -> GatherOutcome:
-        """
-        Roll for a hunting occurrence based on the configured chance.
-        
-        Returns:
-            A HuntOutcome object representing the outcome of the hunt
-        """
-        if gather_type == "hunt":
-            rarity_groups, rarity_weights = self.data.get_hunt_outcomes_and_weights(guild_id)
-        else:
-            rarity_groups, rarity_weights = self.data.get_steal_outcomes_and_weights(guild_id)
-
-        selected_group = random.choices(rarity_groups, weights=rarity_weights, k=1)[0]
-        return random.choice(selected_group)
-
-    def _get_affliction_from_name(self, affliction_name: str, guild_id: int) -> (Affliction, int):
-        """
-        Returns the affliction object and its index in the afflictions list.
-        :param affliction_name: The name of the affliction to search for
-        :param guild_id: The ID of the guild to search in
-        :return: Returns the affliction object and its index in the afflictions list
-        """
-        return next(
-            (a, i) for i, a in enumerate(self.data.get_affliction_list(guild_id)) if
-            a.name.lower() == affliction_name.lower())
-
-    def _if_affliction_exists(self, affliction: str, guild_id: int) -> bool:
-        """ Checks if affliction exists in the guild's affliction list """
-        return any(a.name.lower() == affliction.lower() for a in self.data.get_affliction_list(guild_id))
-
-    def _validate_directory(self, directory: str) -> bool:
-        if not os.path.exists(directory):
-            self.console.print(
-                f"[yellow]Warning: Directory not found. Creating directory: {directory}.")
-            self.logger.log(f"Directory not found. Creating directory: {directory}", "Json")
-            try:
-                os.makedirs(directory)
-                return True
-            except Exception as e:
-                self.console.print(f"[red bold]Error creating directory: {e}")
-                self.logger.log(f"Error creating directory: {e}", "Json")
-                return False  # Return if directory creation fails
-        return True
-
-    def _validate_user(self, user_id: int, guild_id: int) -> int:
-        """ Returns the balance of the user, and sets users balance to the guilds starting balance from configs """
-        if user_id in self.data.balances:
-            return self.data.balances[user_id]
-
-        self.data.balances[user_id] = self.data.get_guild_config(guild_id).starting_pay
-        self.console.print("User balance created:", user_id)
-        self.logger.log(f"User balance created: {user_id}", "Bot")
-        return self.data.get_guild_config(guild_id).starting_pay
-
-    def _write_token_file(self, token: str):
-        if not self._validate_directory("data/"):
-            return
-
-        try:
-            with open("data/bot_token.txt", "w") as f:
-                f.write(token)
-            self.console.print("[green]Token saved to data/bot_token.txt[/]")
-            self.logger.log("Token saved to data/bot_token.txt", "Bot")
-        except Exception as e:
-            self.console.print(f"[red]Error saving token to data/bot_token.txt: {e}")
-            self.logger.log(f"Error saving token to data/bot_token.txt: {e}", "Bot")
-
-    def _exit_handler(self):
-        self.console.print("\n[red]Bot shutting down...[/]")
-        self.logger.log("Bot shutting down...", "Bot")
-
-        # Stop autosave thread if running
-        self.data.stop_autosave_thread()
-        self.data.save()
-
-    def run(self):
-        """Run the Discord bot."""
-        atexit.register(self._exit_handler)
-        token = None
-
-        token = os.getenv("DISCORD_TOKEN")
-
-        # First try to get token from data/bot_token.txt
-        if not token:
-            try:
-                with open("data/bot_token.txt", "r") as f:
-                    token = f.read().strip()
-                    if not validate_discord_token(token):
-                        self.console.print(
-                            "[red]Token file holds invalid Discord token, checking args. If args do not contain '--token=' then collecting manual input.[/]")
-                        token = None
-            except FileNotFoundError:
-                self.console.print(
-                    "[yellow]Token file not found, checking args. If args do not contain '--token=' then collecting manual input.[/]")
-
-        for arg in sys.argv:
-            if arg == "--debug":
-                self.console.print("[yellow]Debug mode enabled[/]")
-                self.logger.log("Debug mode enabled", "Bot")
-                self.client.debug = True
-            elif arg.startswith("--token="):
-                token = arg.split("=")[1]
-
-                if not validate_discord_token(token):
-                    token = None
-                    self.console.print("[red]Invalid token. Please enter your token.[/]")
-                    break
-
-                self._write_token_file(token)
-                break
-
-        if token is None:
-            while True:
-                token = input("Enter your bot token > ")
-                if token == "":
-                    self.console.print("[red]Error: No token provided")
-                    self.logger.log("No token provided", "Bot")
-                    continue
-
-                if validate_discord_token(token):
-                    self._write_token_file(token)
-                    break
-                print("Invalid token")
-
-        self.client.run(token)
-
-    def exit(self):
-        """Exit the bot gracefully."""
-        self._exit_handler()
-        self.client.close()
-
-
-if __name__ == "__main__":
-    Pagget().run()
+if __name__ == '__main__':
+    Pagget().run(os.environ['DISCORD_TOKEN'])

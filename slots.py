@@ -1,9 +1,9 @@
 import random
-from typing import List
 
 import discord
 
-from classes.saving import Data
+import database_utils
+import models
 
 
 class SlotsView(discord.ui.View):
@@ -20,17 +20,13 @@ class SlotsView(discord.ui.View):
 
 
 class Slots:
-    """
-    For slots, we need the bet, the user, and the dictionary of user balances so we can update the users balance
-    """
-
     message: discord.Message
 
-    def __init__(self, user: discord.User, bet: int, data: Data, minimum_bet: int):
-        self.user: discord.User = user
-        self.bet: int = bet
-        self.data = data
-        self.minimum_bet: int = minimum_bet
+    def __init__(self, user: discord.User, bet: int, database: database_utils.DatabaseClient, server: models.Server):
+        self.user = user
+        self.bet = bet
+        self.database = database
+        self.server = server
 
         self.slot_emoji = [
             ":moneybag:", ":gem:", ":four_leaf_clover:", ":star:", ":slot_machine:"
@@ -41,35 +37,22 @@ class Slots:
 
         self.round_income = 0
         self.user_gross_income = 0
-        self.rolled_slots: List[str] = []
+        self.rolled_slots: list[str] = []
         self.view = SlotsView(self._spin_callback)
 
-    async def run(self, interaction):
-        self._spin()
-        await interaction.response.send_message(embed=self._get_embed(), view=self.view)
-        self.message: discord.Message = await interaction.original_response()
+    async def run(self, interaction: discord.Interaction):
+        self.spin()
+        await interaction.response.send_message(embed=self.get_embed(), view=self.view)
+        self.message = await interaction.original_response()
 
-    async def _spin_callback(self, interaction: discord.Interaction):
-        if interaction.user.id != self.user.id:
-            await interaction.response.send_message("Only the user that started the game can play.", ephemeral=True)
-            return
-
-        if self.data.get_user_balance(interaction.user.id) < self.minimum_bet:
-            await interaction.response.send_message("Huh, looks like your all out of money.", ephemeral=True)
-            return
-        self._spin()
-
-        await self.message.edit(embed=self._get_embed(), view=self.view)
-        await interaction.response.defer()
-
-    def _spin(self):
+    def spin(self):
         weights = [1, 2, 3, 4, 5]  # emoji[0] is rarest, emoji[3] is most common
         self.rolled_slots = random.choices(self.slot_emoji, weights=weights, k=3)
         self._calculate_payout()
 
-    def _get_embed(self) -> discord.Embed:
+    def get_embed(self):
         embed_description: str = "Press the button to spin the slots!"
-        slots_padding: int = round((len(embed_description) / 2 - len(" | ".join('⠀'))) + 1)
+        slots_padding: int = round((len(embed_description) / 2 - len(' | '.join('⠀'))) + 1)
         embed = discord.Embed(
             title="Slots",
             # The character we are repeating for the padding is a no break space, which discord does not cut off the start of lines
@@ -90,7 +73,6 @@ class Slots:
         3 of low symbols: 2-5x bet
         2 of highest: 2x bet
         Mixed combinations: 0.5x bet (or nothing)
-        :return: 
         """
         if len(self.rolled_slots) == 0:
             return
@@ -116,18 +98,30 @@ class Slots:
             if (emoji_index, count) in payouts:
                 multiplier = payouts[(emoji_index, count)]
                 profit = round(self.bet * multiplier)
-                self._update_money(profit)
+                self.update_money(profit)
                 won = True
                 break
 
         # If no winning combination found
         if not won:
             self.round_income = 0
-            user_balance = self.data.get_user_balance(self.user.id)
-            self.data.set_user_balance(self.user.id, user_balance - self.bet)
+            self.database.add_berries_balance(self.user.id, self.server.id, -self.bet)
 
-    def _update_money(self, profit):
+
+    async def _spin_callback(self, interaction: discord.Interaction):
+        if interaction.user.id != self.user.id:
+            await interaction.response.send_message("Only the user that started the game can play.", ephemeral=True)
+            return
+
+        if self.database.get_berries_balance(self.user.id, self.server.id) < self.server.minimum_bet:
+            await interaction.response.send_message("Huh, looks like your all out of money.", ephemeral=True)
+            return
+        self.spin()
+
+        await self.message.edit(embed=self.get_embed(), view=self.view)
+        await interaction.response.defer()
+
+    def update_money(self, profit):
         self.user_gross_income += profit
         self.round_income = profit
-        user_balance = self.data.get_user_balance(self.user.id)
-        self.data.set_user_balance(self.user.id, user_balance + profit)
+        self.database.add_berries_balance(self.user.id, self.server.id, profit)
